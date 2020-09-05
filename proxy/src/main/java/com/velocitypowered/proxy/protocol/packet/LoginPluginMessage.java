@@ -49,7 +49,9 @@ public class LoginPluginMessage extends DeferredByteBufHolder implements Minecra
     this.id = ProtocolUtils.readVarInt(buf);
     this.channel = ProtocolUtils.readString(buf);
     if (buf.isReadable()) {
-      this.replace(buf.readSlice(buf.readableBytes()));
+      // TODO This change needs to be reviewed.
+      // TODO readSlice results in only partial data getting forwarded, readRetainedSlice solves this issue.
+      this.replace(buf.readRetainedSlice(buf.readableBytes()));
     } else {
       this.replace(Unpooled.EMPTY_BUFFER);
     }
@@ -68,5 +70,10 @@ public class LoginPluginMessage extends DeferredByteBufHolder implements Minecra
   @Override
   public boolean handle(MinecraftSessionHandler handler) {
     return handler.handle(this);
+  }
+  
+  @Override
+  public LoginPluginMessage retain() {
+    return (LoginPluginMessage) super.retain();
   }
 }

@@ -1,12 +1,18 @@
 package com.velocitypowered.proxy.connection.backend;
 
 import com.velocitypowered.api.util.GameProfile;
+import com.velocitypowered.api.util.UuidUtils;
 import com.velocitypowered.proxy.VelocityServer;
 import com.velocitypowered.proxy.config.PlayerInfoForwarding;
 import com.velocitypowered.proxy.config.VelocityConfiguration;
 import com.velocitypowered.proxy.connection.MinecraftConnection;
 import com.velocitypowered.proxy.connection.MinecraftSessionHandler;
 import com.velocitypowered.proxy.connection.VelocityConstants;
+import com.velocitypowered.proxy.connection.client.ConnectedPlayer;
+import com.velocitypowered.proxy.connection.client.InitialConnectSessionHandler;
+import com.velocitypowered.proxy.connection.forge.modern.ModernForgeConstants;
+import com.velocitypowered.proxy.connection.forge.modern.ModernForgeHandshakeBackendPhase;
+import com.velocitypowered.proxy.connection.forge.modern.ModernForgeHandshakeClientPhase;
 import com.velocitypowered.proxy.connection.util.ConnectionRequestResults;
 import com.velocitypowered.proxy.connection.util.ConnectionRequestResults.Impl;
 import com.velocitypowered.proxy.protocol.ProtocolUtils;
@@ -22,10 +28,15 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayDeque;
+import java.util.Queue;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import javax.crypto.Mac;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+
+import io.netty.util.ReferenceCountUtil;
 import net.kyori.adventure.text.TextComponent;
 
 public class LoginSessionHandler implements MinecraftSessionHandler {
@@ -33,6 +44,7 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
   private static final TextComponent MODERN_IP_FORWARDING_FAILURE = TextComponent
       .of("Your server did not send a forwarding request to the proxy. Is it set up correctly?");
 
+  private final Queue<LoginPluginMessage> loginPluginMessages = new ArrayDeque<>();
   private final VelocityServer server;
   private final VelocityServerConnection serverConn;
   private final CompletableFuture<Impl> resultFuture;
@@ -46,12 +58,33 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
   }
 
   @Override
+  public void deactivated() {
+    for (LoginPluginMessage message : loginPluginMessages) {
+      ReferenceCountUtil.release(message);
+    }
+  }
+
+  @Override
   public boolean handle(EncryptionRequest packet) {
     throw new IllegalStateException("Backend server is online-mode!");
   }
 
   @Override
   public boolean handle(LoginPluginMessage packet) {
+    VelocityServerConnection existingConnection = serverConn.getPlayer().getConnectedServer();
+    if (existingConnection != null && existingConnection != serverConn) {
+      existingConnection.getPhase().onDepartForNewServer(existingConnection,
+              serverConn.getPlayer());
+      
+      // Shut down the existing server connection.
+      serverConn.getPlayer().setConnectedServer(null);
+      serverConn.getPlayer().getConnection().setSessionHandler(new InitialConnectSessionHandler(serverConn.getPlayer()));
+      existingConnection.disconnect();
+
+      // Send keep alive to try to avoid timeouts
+      serverConn.getPlayer().sendKeepAlive();
+    }
+
     MinecraftConnection mc = serverConn.ensureConnected();
     VelocityConfiguration configuration = server.getConfiguration();
     if (configuration.getPlayerInfoForwardingMode() == PlayerInfoForwarding.MODERN && packet
@@ -62,10 +95,18 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
       LoginPluginResponse response = new LoginPluginResponse(packet.getId(), true, forwardingData);
       mc.write(response);
       informationForwarded = true;
-    } else {
-      // Don't understand
-      mc.write(new LoginPluginResponse(packet.getId(), false, Unpooled.EMPTY_BUFFER));
+      return true;
+    } else if (packet.getChannel().equals(ModernForgeConstants.LOGIN_WRAPPER_CHANNEL)) {
+      if (serverConn.getPhase().handle(serverConn, serverConn.getPlayer(), packet)) {
+        return true;
+      } else if (!serverConn.getPhase().consideredComplete()
+          || !serverConn.getPlayer().getPhase().consideredComplete()) {
+        loginPluginMessages.add(packet.retain());
+        return true;
+      }
     }
+    // Don't understand
+    mc.write(new LoginPluginResponse(packet.getId(), false, Unpooled.EMPTY_BUFFER));
     return true;
   }
 
@@ -98,6 +139,31 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
     // Move into the PLAY phase.
     MinecraftConnection smc = serverConn.ensureConnected();
     smc.setState(StateRegistry.PLAY);
+    if (serverConn.getPhase() == ModernForgeHandshakeBackendPhase.IN_PROGRESS) {
+      serverConn.setConnectionPhase(ModernForgeHandshakeBackendPhase.COMPLETE);
+    }
+  
+    ConnectedPlayer player = serverConn.getPlayer();
+    if (player.getPhase() == ModernForgeHandshakeClientPhase.IN_PROGRESS) {
+      player.setPhase(ModernForgeHandshakeClientPhase.COMPLETE);
+    }
+    
+    if (player.getConnection().getState() == StateRegistry.LOGIN) {
+      VelocityConfiguration configuration = server.getConfiguration();
+      UUID playerUniqueId = player.getUniqueId();
+      if (configuration.getPlayerInfoForwardingMode() == PlayerInfoForwarding.NONE) {
+        playerUniqueId = UuidUtils.generateOfflinePlayerUuid(player.getUsername());
+      }
+
+      ServerLoginSuccess success = new ServerLoginSuccess();
+      success.setUsername(player.getUsername());
+      success.setUuid(playerUniqueId);
+
+      // TODO This change needs to be reviewed. (Unforeseen issue)
+      // TODO We switch to PLAY here as we need to stay in the LOGIN state until the negotiations have completed.
+      player.getConnection().write(success);
+      player.getConnection().setState(StateRegistry.PLAY);
+    }
 
     // Switch to the transition handler.
     smc.setSessionHandler(new TransitionSessionHandler(server, serverConn, resultFuture));
@@ -123,6 +189,17 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
       resultFuture.completeExceptionally(
           new QuietRuntimeException("The connection to the remote server was unexpectedly closed.")
       );
+    }
+  }
+  
+  /**
+   * Immediately send any queued messages to the client.
+   */
+  public void flushQueuedMessages() {
+    MinecraftConnection connection = serverConn.getPlayer().getConnection();
+    LoginPluginMessage pm;
+    while ((pm = loginPluginMessages.poll()) != null) {
+      connection.write(pm);
     }
   }
 

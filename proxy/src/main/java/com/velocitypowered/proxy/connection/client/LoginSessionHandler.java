@@ -19,18 +19,13 @@ import com.velocitypowered.api.event.player.GameProfileRequestEvent;
 import com.velocitypowered.api.event.player.PlayerChooseInitialServerEvent;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.util.GameProfile;
-import com.velocitypowered.api.util.UuidUtils;
 import com.velocitypowered.proxy.VelocityServer;
-import com.velocitypowered.proxy.config.PlayerInfoForwarding;
-import com.velocitypowered.proxy.config.VelocityConfiguration;
 import com.velocitypowered.proxy.connection.MinecraftConnection;
 import com.velocitypowered.proxy.connection.MinecraftSessionHandler;
-import com.velocitypowered.proxy.protocol.StateRegistry;
 import com.velocitypowered.proxy.protocol.packet.Disconnect;
 import com.velocitypowered.proxy.protocol.packet.EncryptionRequest;
 import com.velocitypowered.proxy.protocol.packet.EncryptionResponse;
 import com.velocitypowered.proxy.protocol.packet.ServerLogin;
-import com.velocitypowered.proxy.protocol.packet.ServerLoginSuccess;
 import com.velocitypowered.proxy.protocol.packet.SetCompression;
 import io.netty.buffer.ByteBuf;
 import java.net.InetSocketAddress;
@@ -38,7 +33,6 @@ import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.util.Arrays;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
@@ -238,18 +232,6 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
       mcConnection.write(new SetCompression(threshold));
       mcConnection.setCompressionThreshold(threshold);
     }
-    VelocityConfiguration configuration = server.getConfiguration();
-    UUID playerUniqueId = player.getUniqueId();
-    if (configuration.getPlayerInfoForwardingMode() == PlayerInfoForwarding.NONE) {
-      playerUniqueId = UuidUtils.generateOfflinePlayerUuid(player.getUsername());
-    }
-    ServerLoginSuccess success = new ServerLoginSuccess();
-    success.setUsername(player.getUsername());
-    success.setUuid(playerUniqueId);
-    mcConnection.write(success);
-
-    mcConnection.setAssociation(player);
-    mcConnection.setState(StateRegistry.PLAY);
 
     server.getEventManager().fire(new LoginEvent(player))
         .thenAcceptAsync(event -> {
@@ -270,6 +252,7 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
               return;
             }
 
+            mcConnection.setAssociation(player);
             mcConnection.setSessionHandler(new InitialConnectSessionHandler(player));
             server.getEventManager().fire(new PostLoginEvent(player))
                 .thenRun(() -> connectToInitialServer(player));

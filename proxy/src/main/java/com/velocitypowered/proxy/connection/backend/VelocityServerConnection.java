@@ -1,7 +1,6 @@
 package com.velocitypowered.proxy.connection.backend;
 
 import static com.velocitypowered.proxy.VelocityServer.GENERAL_GSON;
-import static com.velocitypowered.proxy.connection.forge.legacy.LegacyForgeConstants.HANDSHAKE_HOSTNAME_TOKEN;
 import static com.velocitypowered.proxy.network.Connections.HANDLER;
 
 import com.google.common.base.Preconditions;
@@ -17,6 +16,8 @@ import com.velocitypowered.proxy.connection.ConnectionTypes;
 import com.velocitypowered.proxy.connection.MinecraftConnection;
 import com.velocitypowered.proxy.connection.MinecraftConnectionAssociation;
 import com.velocitypowered.proxy.connection.client.ConnectedPlayer;
+import com.velocitypowered.proxy.connection.forge.legacy.LegacyForgeConstants;
+import com.velocitypowered.proxy.connection.forge.modern.ModernForgeConstants;
 import com.velocitypowered.proxy.connection.registry.DimensionRegistry;
 import com.velocitypowered.proxy.connection.util.ConnectionRequestResults.Impl;
 import com.velocitypowered.proxy.protocol.StateRegistry;
@@ -141,7 +142,11 @@ public class VelocityServerConnection implements MinecraftConnectionAssociation,
       byte[] secret = server.getConfiguration().getForwardingSecret();
       handshake.setServerAddress(createBungeeGuardForwardingAddress(secret));
     } else if (proxyPlayer.getConnection().getType() == ConnectionTypes.LEGACY_FORGE) {
-      handshake.setServerAddress(destAddress.getHostString() + HANDSHAKE_HOSTNAME_TOKEN);
+      handshake.setServerAddress(destAddress.getHostString()
+              + LegacyForgeConstants.HANDSHAKE_HOSTNAME_TOKEN);
+    } else if (proxyPlayer.getConnection().getType() == ConnectionTypes.MODERN_FORGE) {
+      handshake.setServerAddress(destAddress.getHostString()
+              + ModernForgeConstants.HANDSHAKE_HOSTNAME_TOKEN);
     } else {
       handshake.setServerAddress(destAddress.getHostString());
     }

@@ -51,6 +51,11 @@ public class ArgumentPropertyRegistry {
    */
   public static ArgumentType<?> deserialize(ByteBuf buf) {
     String identifier = ProtocolUtils.readString(buf);
+    // Failed to serialize
+    if (identifier.equals("minecraft:")) {
+      return new PassthroughProperty(identifier, null, null);
+    }
+
     ArgumentPropertySerializer<?> serializer = byId.get(identifier);
     if (serializer == null) {
       throw new IllegalArgumentException("Argument type identifier " + identifier + " unknown.");

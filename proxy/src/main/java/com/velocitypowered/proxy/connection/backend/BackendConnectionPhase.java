@@ -2,6 +2,7 @@ package com.velocitypowered.proxy.connection.backend;
 
 import com.velocitypowered.proxy.connection.client.ConnectedPlayer;
 import com.velocitypowered.proxy.connection.forge.legacy.LegacyForgeHandshakeBackendPhase;
+import com.velocitypowered.proxy.protocol.packet.LoginPluginMessage;
 import com.velocitypowered.proxy.protocol.packet.PluginMessage;
 
 /**
@@ -11,6 +12,19 @@ import com.velocitypowered.proxy.protocol.packet.PluginMessage;
  * {@link LegacyForgeHandshakeBackendPhase}.</p>
  */
 public interface BackendConnectionPhase {
+
+  /**
+   * Handle a login plugin message in the context of
+   * this phase.
+   *
+   * @param message The message to handle
+   * @return true if handled, false otherwise.
+   */
+  default boolean handle(VelocityServerConnection server,
+                         ConnectedPlayer player,
+                         LoginPluginMessage message) {
+    return false;
+  }
 
   /**
    * Handle a plugin message in the context of
