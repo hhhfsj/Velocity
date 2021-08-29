@@ -86,7 +86,7 @@ public class LoginPluginMessage extends DeferredByteBufHolder implements Minecra
   public boolean handle(MinecraftSessionHandler handler) {
     return handler.handle(this);
   }
-  
+
   @Override
   public LoginPluginMessage retain() {
     return (LoginPluginMessage) super.retain();

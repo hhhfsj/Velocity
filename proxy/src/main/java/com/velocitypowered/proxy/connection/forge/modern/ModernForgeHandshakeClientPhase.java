@@ -1,14 +1,9 @@
 package com.velocitypowered.proxy.connection.forge.modern;
 
 import com.velocitypowered.proxy.connection.MinecraftConnection;
-import com.velocitypowered.proxy.connection.MinecraftSessionHandler;
 import com.velocitypowered.proxy.connection.backend.VelocityServerConnection;
 import com.velocitypowered.proxy.connection.client.ClientConnectionPhase;
-import com.velocitypowered.proxy.connection.client.ClientPlaySessionHandler;
 import com.velocitypowered.proxy.connection.client.ConnectedPlayer;
-import com.velocitypowered.proxy.connection.forge.legacy.LegacyForgeConstants;
-import com.velocitypowered.proxy.connection.forge.legacy.LegacyForgeHandshakeBackendPhase;
-import com.velocitypowered.proxy.protocol.MinecraftPacket;
 import com.velocitypowered.proxy.protocol.ProtocolUtils;
 import com.velocitypowered.proxy.protocol.StateRegistry;
 import com.velocitypowered.proxy.protocol.packet.LoginPluginMessage;
@@ -16,13 +11,12 @@ import com.velocitypowered.proxy.protocol.packet.LoginPluginResponse;
 import com.velocitypowered.proxy.protocol.packet.PluginMessage;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import org.slf4j.LoggerFactory;
 
 /**
  * Allows for simple tracking of the phase that the Legacy Forge handshake is in.
  */
 public enum ModernForgeHandshakeClientPhase implements ClientConnectionPhase {
-  
+
   /**
    * No handshake packets have yet been sent.
    */
@@ -31,7 +25,7 @@ public enum ModernForgeHandshakeClientPhase implements ClientConnectionPhase {
     ModernForgeHandshakeClientPhase nextPhase() {
       return IN_PROGRESS;
     }
-    
+
     @Override
     public void onFirstJoin(ConnectedPlayer player) {
       // We have something special to do for legacy Forge servers - during first connection the FML
@@ -42,7 +36,7 @@ public enum ModernForgeHandshakeClientPhase implements ClientConnectionPhase {
       // Forge client that we must reset on the next switch.
       player.setPhase(ModernForgeHandshakeClientPhase.COMPLETE);
     }
-    
+
     @Override
     boolean onHandle(ConnectedPlayer player,
                      LoginPluginResponse message,
@@ -52,7 +46,7 @@ public enum ModernForgeHandshakeClientPhase implements ClientConnectionPhase {
       return false;
     }
   },
-  
+
   /**
    * Waiting for the client to acknowledge the reset before starting handshake.
    */
@@ -70,13 +64,13 @@ public enum ModernForgeHandshakeClientPhase implements ClientConnectionPhase {
       return false;
     }
   },
-  
+
   /**
    * Client and Server exchange pleasantries.
    */
   IN_PROGRESS {
   },
-  
+
   /**
    * The handshake is complete. The handshake can be reset.
    *
@@ -97,34 +91,34 @@ public enum ModernForgeHandshakeClientPhase implements ClientConnectionPhase {
       ProtocolUtils.writeVarInt(byteBuf, 1);
       // Discriminator
       byteBuf.writeByte(ModernForgeConstants.RESET_DISCRIMINATOR);
-      
+
       if (player.getConnection().getState() == StateRegistry.LOGIN) {
         player.getConnection().write(new LoginPluginMessage(
-            ModernForgeConstants.RESET_DISCRIMINATOR,
-            ModernForgeConstants.LOGIN_WRAPPER_CHANNEL,
-            byteBuf));
+                ModernForgeConstants.RESET_DISCRIMINATOR,
+                ModernForgeConstants.LOGIN_WRAPPER_CHANNEL,
+                byteBuf));
       } else {
         player.getConnection().write(new PluginMessage(
-            ModernForgeConstants.LOGIN_WRAPPER_CHANNEL,
-            byteBuf));
+                ModernForgeConstants.LOGIN_WRAPPER_CHANNEL,
+                byteBuf));
         player.getConnection().setState(StateRegistry.LOGIN);
       }
-      
+
       player.setPhase(ModernForgeHandshakeClientPhase.WAITING_RESET);
     }
-    
+
     @Override
     public boolean consideredComplete() {
       return true;
     }
   };
-  
+
   /**
    * Creates an instance of the {@link ModernForgeHandshakeClientPhase}.
    */
   ModernForgeHandshakeClientPhase() {
   }
-  
+
   @Override
   public final boolean handle(ConnectedPlayer player,
                               LoginPluginResponse message,
@@ -142,11 +136,11 @@ public enum ModernForgeHandshakeClientPhase implements ClientConnectionPhase {
         return newPhase.onHandle(player, message, backendConn);
       }
     }
-    
+
     // Not handled, fallback
     return false;
   }
-  
+
   /**
    * Handles the phase tasks.
    *
@@ -161,16 +155,16 @@ public enum ModernForgeHandshakeClientPhase implements ClientConnectionPhase {
                    MinecraftConnection backendConn) {
     // Send the packet on to the server.
     backendConn.write(message.retain());
-    
+
     // We handled the packet. No need to continue processing.
     return true;
   }
-  
+
   @Override
   public boolean consideredComplete() {
     return false;
   }
-  
+
   /**
    * Gets the next phase, if any (will return self if we are at the end
    * of the handshake).
@@ -180,7 +174,7 @@ public enum ModernForgeHandshakeClientPhase implements ClientConnectionPhase {
   ModernForgeHandshakeClientPhase nextPhase() {
     return this;
   }
-  
+
   /**
    * Get the phase to act on, depending on the packet that has been sent.
    *
@@ -190,4 +184,5 @@ public enum ModernForgeHandshakeClientPhase implements ClientConnectionPhase {
   private ModernForgeHandshakeClientPhase getNewPhase(LoginPluginResponse packet) {
     return nextPhase();
   }
+
 }

@@ -153,10 +153,10 @@ public class HandshakeSessionHandler implements MinecraftSessionHandler {
       // forge handshake attempts. Also sends a reset handshake packet on every transition.
       return ConnectionTypes.UNDETERMINED_17;
     } else if (handshake.getServerAddress().endsWith(LegacyForgeConstants.HANDSHAKE_HOSTNAME_TOKEN)
-        && handshake.getProtocolVersion().compareTo(ProtocolVersion.MINECRAFT_1_13) < 0) {
+            && handshake.getProtocolVersion().compareTo(ProtocolVersion.MINECRAFT_1_13) < 0) {
       return ConnectionTypes.LEGACY_FORGE;
     } else if (handshake.getServerAddress().endsWith(ModernForgeConstants.HANDSHAKE_HOSTNAME_TOKEN)
-        && handshake.getProtocolVersion().compareTo(ProtocolVersion.MINECRAFT_1_13) >= 0) {
+            && handshake.getProtocolVersion().compareTo(ProtocolVersion.MINECRAFT_1_13) >= 0) {
       return ConnectionTypes.MODERN_FORGE;
     } else {
       return ConnectionTypes.VANILLA;

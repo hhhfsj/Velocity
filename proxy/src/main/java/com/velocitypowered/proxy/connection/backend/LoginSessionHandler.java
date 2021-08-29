@@ -62,10 +62,10 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
   private static final Component MODERN_IP_FORWARDING_FAILURE = Component
       .translatable("velocity.error.modern-forwarding-failed");
 
-  private final Queue<LoginPluginMessage> loginPluginMessages = new ArrayDeque<>();
   private final VelocityServer server;
   private final VelocityServerConnection serverConn;
   private final CompletableFuture<Impl> resultFuture;
+  private final Queue<LoginPluginMessage> loginPluginMessages;
   private boolean informationForwarded;
 
   LoginSessionHandler(VelocityServer server, VelocityServerConnection serverConn,
@@ -73,6 +73,7 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
     this.server = server;
     this.serverConn = serverConn;
     this.resultFuture = resultFuture;
+    this.loginPluginMessages = new ArrayDeque<>();
   }
 
   @Override
@@ -93,7 +94,7 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
     if (existingConnection != null && existingConnection != serverConn) {
       existingConnection.getPhase().onDepartForNewServer(existingConnection,
               serverConn.getPlayer());
-      
+
       // Shut down the existing server connection.
       serverConn.getPlayer().setConnectedServer(null);
       serverConn.getPlayer().getConnection().setSessionHandler(new InitialConnectSessionHandler(serverConn.getPlayer()));
@@ -118,7 +119,7 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
       if (serverConn.getPhase().handle(serverConn, serverConn.getPlayer(), packet)) {
         return true;
       } else if (!serverConn.getPhase().consideredComplete()
-          || !serverConn.getPlayer().getPhase().consideredComplete()) {
+              || !serverConn.getPlayer().getPhase().consideredComplete()) {
         loginPluginMessages.add(packet.retain());
         return true;
       }
@@ -160,12 +161,12 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
     if (serverConn.getPhase() == ModernForgeHandshakeBackendPhase.IN_PROGRESS) {
       serverConn.setConnectionPhase(ModernForgeHandshakeBackendPhase.COMPLETE);
     }
-  
+
     ConnectedPlayer player = serverConn.getPlayer();
     if (player.getPhase() == ModernForgeHandshakeClientPhase.IN_PROGRESS) {
       player.setPhase(ModernForgeHandshakeClientPhase.COMPLETE);
     }
-    
+
     if (player.getConnection().getState() == StateRegistry.LOGIN) {
       VelocityConfiguration configuration = server.getConfiguration();
       UUID playerUniqueId = player.getUniqueId();

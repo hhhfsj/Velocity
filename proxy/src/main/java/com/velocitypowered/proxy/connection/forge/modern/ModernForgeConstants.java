@@ -1,5 +1,8 @@
 package com.velocitypowered.proxy.connection.forge.modern;
 
+/**
+ * Constants for use with Modern Forge systems.
+ */
 public class ModernForgeConstants {
 
   /**
@@ -13,17 +16,17 @@ public class ModernForgeConstants {
    * The channel for forge handshakes.
    */
   public static final String HANDSHAKE_CHANNEL = "fml:handshake";
-  
+
   /**
    * The channel for forge login wrapper.
    */
   public static final String LOGIN_WRAPPER_CHANNEL = "fml:loginwrapper";
-  
+
   /**
    * The reset packet discriminator, Nice!
    */
   static final int RESET_DISCRIMINATOR = 69;
-  
+
   private ModernForgeConstants() {
     throw new AssertionError();
   }
