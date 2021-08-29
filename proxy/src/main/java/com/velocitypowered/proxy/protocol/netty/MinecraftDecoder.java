@@ -76,7 +76,8 @@ public class MinecraftDecoder extends ChannelInboundHandlerAdapter {
       ctx.fireChannelRead(buf);
     } else {
       // TODO Debugging Purposes, This needs to be removed!
-      LoggerFactory.getLogger("LX").info("[DECODE] [{}] [{}] {} ({})", this.state, this.direction, packet.getClass().getName(), packetId);
+      LoggerFactory.getLogger("LX").info("[DECODE] [{}] [{}] {} ({})",
+              this.state, this.direction, packet.getClass().getName(), packetId);
 
       try {
         doLengthSanityChecks(buf, packet);

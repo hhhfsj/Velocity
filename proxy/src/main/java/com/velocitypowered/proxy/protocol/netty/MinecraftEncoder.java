@@ -50,7 +50,8 @@ public class MinecraftEncoder extends MessageToByteEncoder<MinecraftPacket> {
     int packetId = this.registry.getPacketId(msg);
 
     // TODO Debugging Purposes, This needs to be removed!
-    LoggerFactory.getLogger("LX").info("[ENCODE] [{}] [{}] {} ({})", this.state, this.direction, msg.getClass().getName(), packetId);
+    LoggerFactory.getLogger("LX").info("[ENCODE] [{}] [{}] {} ({})",
+            this.state, this.direction, msg.getClass().getName(), packetId);
 
     ProtocolUtils.writeVarInt(out, packetId);
     msg.encode(out, direction, registry.version);
