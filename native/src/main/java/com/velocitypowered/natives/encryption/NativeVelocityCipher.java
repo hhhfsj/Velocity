@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.natives.encryption;
 
 import com.google.common.base.Preconditions;
@@ -19,13 +36,11 @@ public class NativeVelocityCipher implements VelocityCipher {
       return new NativeVelocityCipher(false, key);
     }
   };
-  private static final OpenSslCipherImpl impl = new OpenSslCipherImpl();
-
   private final long ctx;
   private boolean disposed = false;
 
   private NativeVelocityCipher(boolean encrypt, SecretKey key) throws GeneralSecurityException {
-    this.ctx = impl.init(key.getEncoded(), encrypt);
+    this.ctx = OpenSslCipherImpl.init(key.getEncoded(), encrypt);
   }
 
   @Override
@@ -35,13 +50,13 @@ public class NativeVelocityCipher implements VelocityCipher {
     long base = source.memoryAddress() + source.readerIndex();
     int len = source.readableBytes();
 
-    impl.process(ctx, base, len, base);
+    OpenSslCipherImpl.process(ctx, base, len, base);
   }
 
   @Override
   public void close() {
     if (!disposed) {
-      impl.free(ctx);
+      OpenSslCipherImpl.free(ctx);
     }
     disposed = true;
   }

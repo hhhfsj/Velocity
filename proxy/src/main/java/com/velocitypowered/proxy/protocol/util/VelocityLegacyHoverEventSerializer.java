@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.protocol.util;
 
 import java.io.IOException;
@@ -31,7 +48,7 @@ public class VelocityLegacyHoverEventSerializer implements LegacyHoverEventSeria
   }
 
   private static Key legacyIdToFakeKey(byte id) {
-    return Key.of("velocity", "legacy_hover/id_" + id);
+    return Key.key("velocity", "legacy_hover/id_" + id);
   }
 
   @Override
@@ -45,11 +62,11 @@ public class VelocityLegacyHoverEventSerializer implements LegacyHoverEventSeria
     if (idIfString.isEmpty()) {
       key = legacyIdToFakeKey(item.getByte("id"));
     } else {
-      key = Key.of(idIfString);
+      key = Key.key(idIfString);
     }
 
     byte count = item.getByte("Count", (byte) 1);
-    return new ShowItem(key, count, BinaryTagHolder.of(snbt));
+    return ShowItem.of(key, count, BinaryTagHolder.of(snbt));
   }
 
   @Override
@@ -62,10 +79,10 @@ public class VelocityLegacyHoverEventSerializer implements LegacyHoverEventSeria
     try {
       name = componentDecoder.decode(item.getString("name"));
     } catch (Exception e) {
-      name = TextComponent.of(item.getString("name"));
+      name = Component.text(item.getString("name"));
     }
 
-    return new ShowEntity(Key.of(item.getString("type")),
+    return ShowEntity.of(Key.key(item.getString("type")),
         UUID.fromString(item.getString("id")),
         name);
   }
@@ -89,7 +106,7 @@ public class VelocityLegacyHoverEventSerializer implements LegacyHoverEventSeria
       builder.put("tag", TagStringIO.get().asCompound(nbt.string()));
     }
 
-    return TextComponent.of(TagStringIO.get().asString(builder.build()));
+    return Component.text(TagStringIO.get().asString(builder.build()));
   }
 
   @Override
@@ -102,6 +119,6 @@ public class VelocityLegacyHoverEventSerializer implements LegacyHoverEventSeria
     if (name != null) {
       tag.putString("name", componentEncoder.encode(name));
     }
-    return TextComponent.of(TagStringIO.get().asString(tag.build()));
+    return Component.text(TagStringIO.get().asString(tag.build()));
   }
 }

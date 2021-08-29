@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * The Velocity API is licensed under the terms of the MIT License. For more details,
+ * reference the LICENSE file in the api top-level directory.
+ */
+
 package com.velocitypowered.api.event.player;
 
 import com.google.common.base.Preconditions;
@@ -27,11 +34,6 @@ public final class ServerConnectedEvent {
     this.player = Preconditions.checkNotNull(player, "player");
     this.server = Preconditions.checkNotNull(server, "server");
     this.previousServer = previousServer;
-  }
-
-  @Deprecated
-  public ServerConnectedEvent(Player player, RegisteredServer server) {
-    this(player, server, null);
   }
 
   public Player getPlayer() {

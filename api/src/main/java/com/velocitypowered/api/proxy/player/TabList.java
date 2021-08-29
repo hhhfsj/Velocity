@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * The Velocity API is licensed under the terms of the MIT License. For more details,
+ * reference the LICENSE file in the api top-level directory.
+ */
+
 package com.velocitypowered.api.proxy.player;
 
 import com.velocitypowered.api.proxy.Player;
@@ -18,17 +25,9 @@ public interface TabList {
    *
    * @param header the header component
    * @param footer the footer component
-   * @deprecated Use {@link #setHeaderAndFooter(Component, Component)} instead
+   * @deprecated Use {@link Player#sendPlayerListHeaderAndFooter(Component, Component)} instead
    */
   @Deprecated
-  void setHeaderAndFooter(net.kyori.text.Component header, net.kyori.text.Component footer);
-
-  /**
-   * Sets the tab list header and footer for the player.
-   *
-   * @param header the header component
-   * @param footer the footer component
-   */
   void setHeaderAndFooter(Component header, Component footer);
 
   /**

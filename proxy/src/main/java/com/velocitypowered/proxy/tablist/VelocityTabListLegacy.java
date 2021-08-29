@@ -1,9 +1,26 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.tablist;
 
 import com.google.common.collect.ImmutableList;
 import com.velocitypowered.api.proxy.player.TabListEntry;
 import com.velocitypowered.api.util.GameProfile;
-import com.velocitypowered.proxy.connection.MinecraftConnection;
+import com.velocitypowered.proxy.connection.client.ConnectedPlayer;
 import com.velocitypowered.proxy.protocol.packet.PlayerListItem;
 import com.velocitypowered.proxy.protocol.packet.PlayerListItem.Item;
 import java.util.Collections;
@@ -18,14 +35,11 @@ public class VelocityTabListLegacy extends VelocityTabList {
 
   private final Map<String, UUID> nameMapping = new ConcurrentHashMap<>();
 
-  public VelocityTabListLegacy(MinecraftConnection connection) {
-    super(connection);
+  public VelocityTabListLegacy(final ConnectedPlayer player) {
+    super(player);
   }
 
-  @Override
-  public void setHeaderAndFooter(net.kyori.text.Component header, net.kyori.text.Component footer) {
-  }
-
+  @Deprecated
   @Override
   public void setHeaderAndFooter(Component header, Component footer) {
   }
@@ -88,7 +102,6 @@ public class VelocityTabListLegacy extends VelocityTabList {
         // For 1.7 there is only add and remove
         break;
     }
-
   }
 
   @Override

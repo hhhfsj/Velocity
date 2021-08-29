@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * The Velocity API is licensed under the terms of the MIT License. For more details,
+ * reference the LICENSE file in the api top-level directory.
+ */
+
 package com.velocitypowered.api.proxy.config;
 
 import com.velocitypowered.api.proxy.ProxyServer;
@@ -38,15 +45,6 @@ public interface ProxyConfig {
    * @return show plugins in query
    */
   boolean shouldQueryShowPlugins();
-
-  /**
-   * Get the MOTD component shown in the tab list.
-   *
-   * @return the motd component
-   * @deprecated Use {@link #getMotd()} instead
-   */
-  @Deprecated
-  net.kyori.text.Component getMotdComponent();
 
   /**
    * Get the MOTD component shown in the tab list.

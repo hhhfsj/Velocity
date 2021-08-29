@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.protocol.packet;
 
 import com.velocitypowered.api.network.ProtocolVersion;
@@ -16,12 +33,13 @@ public class ClientSettings implements MinecraftPacket {
   private byte difficulty; // 1.7 Protocol
   private short skinParts;
   private int mainHand;
+  private boolean chatFilteringEnabled; // Added in 1.17
 
   public ClientSettings() {
   }
 
   public ClientSettings(String locale, byte viewDistance, int chatVisibility, boolean chatColors,
-      short skinParts, int mainHand) {
+      short skinParts, int mainHand, boolean chatFilteringEnabled) {
     this.locale = locale;
     this.viewDistance = viewDistance;
     this.chatVisibility = chatVisibility;
@@ -81,6 +99,14 @@ public class ClientSettings implements MinecraftPacket {
     this.mainHand = mainHand;
   }
 
+  public boolean isChatFilteringEnabled() {
+    return chatFilteringEnabled;
+  }
+
+  public void setChatFilteringEnabled(boolean chatFilteringEnabled) {
+    this.chatFilteringEnabled = chatFilteringEnabled;
+  }
+
   @Override
   public String toString() {
     return "ClientSettings{"
@@ -90,6 +116,7 @@ public class ClientSettings implements MinecraftPacket {
         + ", chatColors=" + chatColors
         + ", skinParts=" + skinParts
         + ", mainHand=" + mainHand
+        + ", chatFilteringEnabled=" + chatFilteringEnabled
         + '}';
   }
 
@@ -108,6 +135,10 @@ public class ClientSettings implements MinecraftPacket {
 
     if (version.compareTo(ProtocolVersion.MINECRAFT_1_9) >= 0) {
       this.mainHand = ProtocolUtils.readVarInt(buf);
+
+      if (version.compareTo(ProtocolVersion.MINECRAFT_1_17) >= 0) {
+        this.chatFilteringEnabled = buf.readBoolean();
+      }
     }
   }
 
@@ -129,6 +160,10 @@ public class ClientSettings implements MinecraftPacket {
 
     if (version.compareTo(ProtocolVersion.MINECRAFT_1_9) >= 0) {
       ProtocolUtils.writeVarInt(buf, mainHand);
+
+      if (version.compareTo(ProtocolVersion.MINECRAFT_1_17) >= 0) {
+        buf.writeBoolean(chatFilteringEnabled);
+      }
     }
   }
 

@@ -10,24 +10,25 @@ buildscript {
 plugins {
     id 'java'
     id "com.github.spotbugs" version "4.2.4" apply false
+    id 'org.cadixdev.licenser' version '0.5.1' apply false
 }
 
 allprojects {
     apply plugin: "com.github.spotbugs"
 
     group 'com.velocitypowered'
-    version '1.1.0-SNAPSHOT'
+    version '3.0.1-SNAPSHOT'
 
     ext {
         // dependency versions
         textVersion = '3.0.4'
-        adventureVersion = '4.0.0-SNAPSHOT'
-        junitVersion = '5.3.0-M1'
-        slf4jVersion = '1.7.25'
+        adventureVersion = '4.8.1'
+        junitVersion = '5.7.0'
+        slf4jVersion = '1.7.30'
         log4jVersion = '2.13.3'
-        nettyVersion = '4.1.51.Final'
+        nettyVersion = '4.1.66.Final'
         guavaVersion = '25.1-jre'
-        checkerFrameworkVersion = '2.7.0'
+        checkerFrameworkVersion = '3.6.1'
         configurateVersion = '3.7.1'
 
         getCurrentShortRevision = {
@@ -43,8 +44,8 @@ allprojects {
     }
 
     java {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
 
     repositories {
@@ -56,9 +57,9 @@ allprojects {
             url 'https://oss.sonatype.org/content/groups/public/'
         }
 
-        // Brigadier
+        // Velocity repo
         maven {
-            url "https://libraries.minecraft.net"
+            url "https://nexus.velocitypowered.com/repository/maven-public/"
         }
     }
 

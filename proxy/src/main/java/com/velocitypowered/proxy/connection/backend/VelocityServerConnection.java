@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.connection.backend;
 
 import static com.velocitypowered.proxy.VelocityServer.GENERAL_GSON;
@@ -30,7 +47,9 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.UnaryOperator;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
@@ -45,8 +64,7 @@ public class VelocityServerConnection implements MinecraftConnectionAssociation,
   private boolean hasCompletedJoin = false;
   private boolean gracefulDisconnect = false;
   private BackendConnectionPhase connectionPhase = BackendConnectionPhases.UNKNOWN;
-  private long lastPingId;
-  private long lastPingSent;
+  private final Map<Long, Long> pendingPings = new HashMap<>();
   private @MonotonicNonNull DimensionRegistry activeDimensionRegistry;
 
   /**
@@ -101,7 +119,9 @@ public class VelocityServerConnection implements MinecraftConnectionAssociation,
     // separated by \0 (the null byte). In order, you send the original host, the player's IP, their
     // UUID (undashed), and if you are in online-mode, their login properties (from Mojang).
     StringBuilder data = new StringBuilder()
-        .append(registeredServer.getServerInfo().getAddress().getHostString())
+        .append(proxyPlayer.getVirtualHost()
+            .orElseGet(() -> registeredServer.getServerInfo().getAddress())
+            .getHostString())
         .append('\0')
         .append(proxyPlayer.getRemoteAddress().getHostString())
         .append('\0')
@@ -249,21 +269,8 @@ public class VelocityServerConnection implements MinecraftConnectionAssociation,
     return gracefulDisconnect;
   }
 
-  public long getLastPingId() {
-    return lastPingId;
-  }
-
-  public long getLastPingSent() {
-    return lastPingSent;
-  }
-
-  void setLastPingId(long lastPingId) {
-    this.lastPingId = lastPingId;
-    this.lastPingSent = System.currentTimeMillis();
-  }
-
-  public void resetLastPingId() {
-    this.lastPingId = -1;
+  public Map<Long, Long> getPendingPings() {
+    return pendingPings;
   }
 
   /**

@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.connection.backend;
 
 import com.velocitypowered.api.util.GameProfile;
@@ -26,6 +43,8 @@ import com.velocitypowered.proxy.protocol.packet.SetCompression;
 import com.velocitypowered.proxy.util.except.QuietRuntimeException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.util.ReferenceCountUtil;
+import java.net.InetSocketAddress;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayDeque;
@@ -35,14 +54,13 @@ import java.util.concurrent.CompletableFuture;
 import javax.crypto.Mac;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
-
-import io.netty.util.ReferenceCountUtil;
+import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 
 public class LoginSessionHandler implements MinecraftSessionHandler {
 
-  private static final TextComponent MODERN_IP_FORWARDING_FAILURE = TextComponent
-      .of("Your server did not send a forwarding request to the proxy. Is it set up correctly?");
+  private static final Component MODERN_IP_FORWARDING_FAILURE = Component
+      .translatable("velocity.error.modern-forwarding-failed");
 
   private final Queue<LoginPluginMessage> loginPluginMessages = new ArrayDeque<>();
   private final VelocityServer server;
@@ -90,7 +108,7 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
     if (configuration.getPlayerInfoForwardingMode() == PlayerInfoForwarding.MODERN && packet
         .getChannel().equals(VelocityConstants.VELOCITY_IP_FORWARDING_CHANNEL)) {
       ByteBuf forwardingData = createForwardingData(configuration.getForwardingSecret(),
-          serverConn.getPlayer().getRemoteAddress().getHostString(),
+          cleanRemoteAddress(serverConn.getPlayer().getRemoteAddress()),
           serverConn.getPlayer().getGameProfile());
       LoginPluginResponse response = new LoginPluginResponse(packet.getId(), true, forwardingData);
       mc.write(response);
@@ -200,6 +218,16 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
     LoginPluginMessage pm;
     while ((pm = loginPluginMessages.poll()) != null) {
       connection.write(pm);
+    }
+  }
+
+  private static String cleanRemoteAddress(InetSocketAddress address) {
+    String addressString = address.getAddress().getHostAddress();
+    int ipv6ScopeIdx = addressString.indexOf('%');
+    if (ipv6ScopeIdx == -1) {
+      return addressString;
+    } else {
+      return addressString.substring(0, ipv6ScopeIdx);
     }
   }
 

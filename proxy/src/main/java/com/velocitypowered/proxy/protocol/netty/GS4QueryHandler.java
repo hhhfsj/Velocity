@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.protocol.netty;
 
 import static com.velocitypowered.api.event.query.ProxyQueryEvent.QueryType.BASIC;
@@ -29,6 +46,7 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import net.kyori.adventure.text.serializer.plain.PlainComponentSerializer;
+import org.apache.logging.log4j.LogManager;
 
 public class GS4QueryHandler extends SimpleChannelInboundHandler<DatagramPacket> {
 
@@ -128,12 +146,12 @@ public class GS4QueryHandler extends SimpleChannelInboundHandler<DatagramPacket>
 
         // Build initial query response
         QueryResponse response = createInitialResponse();
-        boolean isBasic = queryMessage.isReadable();
+        boolean isBasic = !queryMessage.isReadable();
 
         // Call event and write response
         server.getEventManager()
             .fire(new ProxyQueryEvent(isBasic ? BASIC : FULL, senderAddress, response))
-            .whenCompleteAsync((event, exc) -> {
+            .thenAcceptAsync((event) -> {
               // Packet header
               ByteBuf queryResponse = ctx.alloc().buffer();
               queryResponse.writeByte(QUERY_TYPE_STAT);
@@ -162,7 +180,12 @@ public class GS4QueryHandler extends SimpleChannelInboundHandler<DatagramPacket>
               // Send the response
               DatagramPacket responsePacket = new DatagramPacket(queryResponse, msg.sender());
               ctx.writeAndFlush(responsePacket, ctx.voidPromise());
-            }, ctx.channel().eventLoop());
+            }, ctx.channel().eventLoop())
+            .exceptionally((ex) -> {
+              LogManager.getLogger(getClass()).error(
+                  "Exception while writing GS4 response for query from {}", senderAddress, ex);
+              return null;
+            });
         break;
       }
       default:

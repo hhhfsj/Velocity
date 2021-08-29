@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.tablist;
 
 import com.google.common.base.Preconditions;
@@ -5,6 +22,7 @@ import com.velocitypowered.api.proxy.player.TabList;
 import com.velocitypowered.api.proxy.player.TabListEntry;
 import com.velocitypowered.api.util.GameProfile;
 import com.velocitypowered.proxy.connection.MinecraftConnection;
+import com.velocitypowered.proxy.connection.client.ConnectedPlayer;
 import com.velocitypowered.proxy.protocol.packet.HeaderAndFooter;
 import com.velocitypowered.proxy.protocol.packet.PlayerListItem;
 import java.util.ArrayList;
@@ -15,31 +33,26 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import net.kyori.text.Component;
+import net.kyori.adventure.text.Component;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class VelocityTabList implements TabList {
 
+  protected final ConnectedPlayer player;
   protected final MinecraftConnection connection;
   protected final Map<UUID, VelocityTabListEntry> entries = new ConcurrentHashMap<>();
 
-  public VelocityTabList(MinecraftConnection connection) {
-    this.connection = connection;
+  public VelocityTabList(final ConnectedPlayer player) {
+    this.player = player;
+    this.connection = player.getConnection();
   }
 
+  @Deprecated
   @Override
   public void setHeaderAndFooter(Component header, Component footer) {
     Preconditions.checkNotNull(header, "header");
     Preconditions.checkNotNull(footer, "footer");
-    connection.write(HeaderAndFooter.create(header, footer));
-  }
-
-  @Override
-  public void setHeaderAndFooter(net.kyori.adventure.text.Component header,
-      net.kyori.adventure.text.Component footer) {
-    Preconditions.checkNotNull(header, "header");
-    Preconditions.checkNotNull(footer, "footer");
-    connection.write(HeaderAndFooter.create(header, footer, connection.getProtocolVersion()));
+    this.player.sendPlayerListHeaderAndFooter(header, footer);
   }
 
   @Override
@@ -136,7 +149,7 @@ public class VelocityTabList implements TabList {
           if (name == null || properties == null) {
             throw new IllegalStateException("Got null game profile for ADD_PLAYER");
           }
-          entries.put(item.getUuid(), (VelocityTabListEntry) TabListEntry.builder()
+          entries.putIfAbsent(item.getUuid(), (VelocityTabListEntry) TabListEntry.builder()
               .tabList(this)
               .profile(new GameProfile(uuid, name, properties))
               .displayName(item.getDisplayName())

@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.protocol;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -16,6 +33,8 @@ import io.netty.handler.codec.CorruptedFrameException;
 import io.netty.handler.codec.DecoderException;
 import io.netty.handler.codec.EncoderException;
 
+import java.io.DataInput;
+import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -42,7 +61,15 @@ public enum ProtocolUtils {
 
   private static final int DEFAULT_MAX_STRING_SIZE = 65536; // 64KiB
   private static final QuietDecoderException BAD_VARINT_CACHED =
-      new QuietDecoderException("Bad varint decoded");
+      new QuietDecoderException("Bad VarInt decoded");
+  private static final int[] VARINT_EXACT_BYTE_LENGTHS = new int[33];
+
+  static {
+    for (int i = 0; i <= 32; ++i) {
+      VARINT_EXACT_BYTE_LENGTHS[i] = (int) Math.ceil((31d - (i - 1)) / 7d);
+    }
+    VARINT_EXACT_BYTE_LENGTHS[32] = 1; // Special case for the number 0.
+  }
 
   /**
    * Reads a Minecraft-style VarInt from the specified {@code buf}.
@@ -52,7 +79,7 @@ public enum ProtocolUtils {
   public static int readVarInt(ByteBuf buf) {
     int read = readVarIntSafely(buf);
     if (read == Integer.MIN_VALUE) {
-      throw MinecraftDecoder.DEBUG ? new CorruptedFrameException("Bad varint decoded")
+      throw MinecraftDecoder.DEBUG ? new CorruptedFrameException("Bad VarInt decoded")
           : BAD_VARINT_CACHED;
     }
     return read;
@@ -79,20 +106,64 @@ public enum ProtocolUtils {
   }
 
   /**
+   * Returns the exact byte size of {@code value} if it were encoded as a VarInt.
+   * @param value the value to encode
+   * @return the byte size of {@code value} if encoded as a VarInt
+   */
+  public static int varIntBytes(int value) {
+    return VARINT_EXACT_BYTE_LENGTHS[Integer.numberOfLeadingZeros(value)];
+  }
+
+  /**
    * Writes a Minecraft-style VarInt to the specified {@code buf}.
    * @param buf the buffer to read from
    * @param value the integer to write
    */
   public static void writeVarInt(ByteBuf buf, int value) {
-    while (true) {
-      if ((value & 0xFFFFFF80) == 0) {
-        buf.writeByte(value);
-        return;
-      }
-
-      buf.writeByte(value & 0x7F | 0x80);
-      value >>>= 7;
+    // Peel the one and two byte count cases explicitly as they are the most common VarInt sizes
+    // that the proxy will write, to improve inlining.
+    if ((value & (0xFFFFFFFF << 7)) == 0) {
+      buf.writeByte(value);
+    } else if ((value & (0xFFFFFFFF << 14)) == 0) {
+      int w = (value & 0x7F | 0x80) << 8 | (value >>> 7);
+      buf.writeShort(w);
+    } else {
+      writeVarIntFull(buf, value);
     }
+  }
+
+  private static void writeVarIntFull(ByteBuf buf, int value) {
+    // See https://steinborn.me/posts/performance/how-fast-can-you-write-a-varint/
+    if ((value & (0xFFFFFFFF << 7)) == 0) {
+      buf.writeByte(value);
+    } else if ((value & (0xFFFFFFFF << 14)) == 0) {
+      int w = (value & 0x7F | 0x80) << 8 | (value >>> 7);
+      buf.writeShort(w);
+    } else if ((value & (0xFFFFFFFF << 21)) == 0) {
+      int w = (value & 0x7F | 0x80) << 16 | ((value >>> 7) & 0x7F | 0x80) << 8 | (value >>> 14);
+      buf.writeMedium(w);
+    } else if ((value & (0xFFFFFFFF << 28)) == 0) {
+      int w = (value & 0x7F | 0x80) << 24 | (((value >>> 7) & 0x7F | 0x80) << 16)
+          | ((value >>> 14) & 0x7F | 0x80) << 8 | (value >>> 21);
+      buf.writeInt(w);
+    } else {
+      int w = (value & 0x7F | 0x80) << 24 | ((value >>> 7) & 0x7F | 0x80) << 16
+          | ((value >>> 14) & 0x7F | 0x80) << 8 | ((value >>> 21) & 0x7F | 0x80);
+      buf.writeInt(w);
+      buf.writeByte(value >>> 28);
+    }
+  }
+
+  /**
+   * Writes the specified {@code value} as a 21-bit Minecraft VarInt to the specified {@code buf}.
+   * The upper 11 bits will be discarded.
+   * @param buf the buffer to read from
+   * @param value the integer to write
+   */
+  public static void write21BitVarInt(ByteBuf buf, int value) {
+    // See https://steinborn.me/posts/performance/how-fast-can-you-write-a-varint/
+    int w = (value & 0x7F | 0x80) << 16 | ((value >>> 7) & 0x7F | 0x80) << 8 | (value >>> 14);
+    buf.writeMedium(w);
   }
 
   public static String readString(ByteBuf buf) {
@@ -100,7 +171,7 @@ public enum ProtocolUtils {
   }
 
   /**
-   * Reads a VarInt length-prefixed string from the {@code buf}, making sure to not go over
+   * Reads a VarInt length-prefixed UTF-8 string from the {@code buf}, making sure to not go over
    * {@code cap} size.
    * @param buf the buffer to read from
    * @param cap the maximum size of the string, in UTF-8 character length
@@ -227,11 +298,12 @@ public enum ProtocolUtils {
   /**
    * Reads a {@link net.kyori.adventure.nbt.CompoundBinaryTag} from the {@code buf}.
    * @param buf the buffer to read from
+   * @param reader the NBT reader to use
    * @return {@link net.kyori.adventure.nbt.CompoundBinaryTag} the CompoundTag from the buffer
    */
-  public static CompoundBinaryTag readCompoundTag(ByteBuf buf) {
+  public static CompoundBinaryTag readCompoundTag(ByteBuf buf, BinaryTagIO.Reader reader) {
     try {
-      return BinaryTagIO.readDataInput(new ByteBufInputStream(buf));
+      return reader.read((DataInput) new ByteBufInputStream(buf));
     } catch (IOException thrown) {
       throw new DecoderException(
               "Unable to parse NBT CompoundTag, full error: " + thrown.getMessage());
@@ -245,7 +317,7 @@ public enum ProtocolUtils {
    */
   public static void writeCompoundTag(ByteBuf buf, CompoundBinaryTag compoundTag) {
     try {
-      BinaryTagIO.writeDataOutput(compoundTag, new ByteBufOutputStream(buf));
+      BinaryTagIO.writer().write(compoundTag, (DataOutput) new ByteBufOutputStream(buf));
     } catch (IOException e) {
       throw new EncoderException("Unable to encode NBT CompoundTag");
     }
@@ -271,10 +343,6 @@ public enum ProtocolUtils {
    * @param stringArray the array to write
    */
   public static void writeStringArray(ByteBuf buf, String[] stringArray) {
-    if (stringArray == null) {
-      writeVarInt(buf, 0);
-      return;
-    }
     writeVarInt(buf, stringArray.length);
     for (String s : stringArray) {
       writeString(buf, s);
@@ -292,7 +360,7 @@ public enum ProtocolUtils {
       writeString(buf, property.getName());
       writeString(buf, property.getValue());
       String signature = property.getSignature();
-      if (signature != null) {
+      if (signature != null && !signature.isEmpty()) {
         buf.writeBoolean(true);
         writeString(buf, signature);
       } else {

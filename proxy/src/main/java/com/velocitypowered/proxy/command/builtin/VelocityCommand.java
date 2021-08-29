@@ -1,28 +1,68 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.command.builtin;
 
-import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+
+import com.google.common.collect.ImmutableSet;
+import com.google.common.util.concurrent.MoreExecutors;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonSyntaxException;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.permission.Tristate;
 import com.velocitypowered.api.plugin.PluginContainer;
 import com.velocitypowered.api.plugin.PluginDescription;
 import com.velocitypowered.api.proxy.ProxyServer;
+import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.util.ProxyVersion;
 import com.velocitypowered.proxy.VelocityServer;
+import com.velocitypowered.proxy.util.InformationUtils;
+
+import java.net.ConnectException;
+import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
+
+import net.kyori.adventure.identity.Identity;
+import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
+import net.kyori.adventure.text.TranslatableComponent;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.asynchttpclient.AsyncHttpClient;
+import org.asynchttpclient.BoundRequestBuilder;
+import org.asynchttpclient.ListenableFuture;
+import org.asynchttpclient.Response;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 public class VelocityCommand implements SimpleCommand {
@@ -50,6 +90,7 @@ public class VelocityCommand implements SimpleCommand {
         .put("version", new Info(server))
         .put("plugins", new Plugins(server))
         .put("reload", new Reload(server))
+        .put("dump", new Dump(server))
         .build();
   }
 
@@ -59,7 +100,7 @@ public class VelocityCommand implements SimpleCommand {
         .map(Map.Entry::getKey)
         .collect(Collectors.joining("|"));
     String commandText = "/velocity <" + availableCommands + ">";
-    source.sendMessage(TextComponent.of(commandText, NamedTextColor.RED));
+    source.sendMessage(Identity.nil(), Component.text(commandText, NamedTextColor.RED));
   }
 
   @Override
@@ -142,16 +183,15 @@ public class VelocityCommand implements SimpleCommand {
     public void execute(CommandSource source, String @NonNull [] args) {
       try {
         if (server.reloadConfiguration()) {
-          source.sendMessage(TextComponent.of("Configuration reloaded.", NamedTextColor.GREEN));
+          source.sendMessage(Component.translatable("velocity.command.reload-success",
+              NamedTextColor.GREEN));
         } else {
-          source.sendMessage(TextComponent.of(
-              "Unable to reload your configuration. Check the console for more details.",
+          source.sendMessage(Component.translatable("velocity.command.reload-failure",
               NamedTextColor.RED));
         }
       } catch (Exception e) {
         logger.error("Unable to reload configuration", e);
-        source.sendMessage(TextComponent.of(
-            "Unable to reload your configuration. Check the console for more details.",
+        source.sendMessage(Component.translatable("velocity.command.reload-failure",
             NamedTextColor.RED));
       }
     }
@@ -164,6 +204,7 @@ public class VelocityCommand implements SimpleCommand {
 
   private static class Info implements SubCommand {
 
+    private static final TextColor VELOCITY_COLOR = TextColor.fromHexString("#09add3");
     private final ProxyServer server;
 
     private Info(ProxyServer server) {
@@ -173,39 +214,40 @@ public class VelocityCommand implements SimpleCommand {
     @Override
     public void execute(CommandSource source, String @NonNull [] args) {
       if (args.length != 0) {
-        source.sendMessage(TextComponent.of("/velocity version", NamedTextColor.RED));
+        source.sendMessage(Identity.nil(), Component.text("/velocity version", NamedTextColor.RED));
         return;
       }
 
       ProxyVersion version = server.getVersion();
 
-      TextComponent velocity = TextComponent.builder(version.getName() + " ")
+      Component velocity = Component.text().content(version.getName() + " ")
           .decoration(TextDecoration.BOLD, true)
-          .color(NamedTextColor.DARK_AQUA)
-          .append(TextComponent.of(version.getVersion()).decoration(TextDecoration.BOLD, false))
+          .color(VELOCITY_COLOR)
+          .append(Component.text(version.getVersion()).decoration(TextDecoration.BOLD, false))
           .build();
-      TextComponent copyright = TextComponent
-          .of("Copyright 2018-2020 " + version.getVendor() + ". " + version.getName()
-              + " is freely licensed under the terms of the MIT License.");
-      source.sendMessage(velocity);
-      source.sendMessage(copyright);
+      Component copyright = Component
+          .translatable("velocity.command.version-copyright",
+              Component.text(version.getVendor()),
+              Component.text(version.getName()));
+      source.sendMessage(Identity.nil(), velocity);
+      source.sendMessage(Identity.nil(), copyright);
 
       if (version.getName().equals("Velocity")) {
-        TextComponent velocityWebsite = TextComponent.builder()
-            .content("Visit the ")
-            .append(TextComponent.builder("Velocity website")
+        TextComponent embellishment = Component.text()
+            .append(Component.text().content("velocitypowered.com")
                 .color(NamedTextColor.GREEN)
                 .clickEvent(
                     ClickEvent.openUrl("https://www.velocitypowered.com"))
                 .build())
-            .append(TextComponent.of(" or the "))
-            .append(TextComponent.builder("Velocity GitHub")
+            .append(Component.text(" - "))
+            .append(Component.text().content("GitHub")
                 .color(NamedTextColor.GREEN)
+                .decoration(TextDecoration.UNDERLINED, true)
                 .clickEvent(ClickEvent.openUrl(
                     "https://github.com/VelocityPowered/Velocity"))
                 .build())
             .build();
-        source.sendMessage(velocityWebsite);
+        source.sendMessage(Identity.nil(), embellishment);
       }
     }
 
@@ -226,7 +268,7 @@ public class VelocityCommand implements SimpleCommand {
     @Override
     public void execute(CommandSource source, String @NonNull [] args) {
       if (args.length != 0) {
-        source.sendMessage(TextComponent.of("/velocity plugins", NamedTextColor.RED));
+        source.sendMessage(Identity.nil(), Component.text("/velocity plugins", NamedTextColor.RED));
         return;
       }
 
@@ -234,50 +276,196 @@ public class VelocityCommand implements SimpleCommand {
       int pluginCount = plugins.size();
 
       if (pluginCount == 0) {
-        source.sendMessage(TextComponent.of("No plugins installed.", NamedTextColor.YELLOW));
+        source.sendMessage(Component.translatable("velocity.command.no-plugins",
+            NamedTextColor.YELLOW));
         return;
       }
 
-      TextComponent.Builder output = TextComponent.builder("Plugins: ")
-          .color(NamedTextColor.YELLOW);
+      TextComponent.Builder listBuilder = Component.text();
       for (int i = 0; i < pluginCount; i++) {
         PluginContainer plugin = plugins.get(i);
-        output.append(componentForPlugin(plugin.getDescription()));
+        listBuilder.append(componentForPlugin(plugin.getDescription()));
         if (i + 1 < pluginCount) {
-          output.append(TextComponent.of(", "));
+          listBuilder.append(Component.text(", "));
         }
       }
 
-      source.sendMessage(output.build());
+      TranslatableComponent.Builder output = Component.translatable()
+          .key("velocity.command.plugins-list")
+          .color(NamedTextColor.YELLOW)
+          .args(listBuilder.build());
+      source.sendMessage(Identity.nil(), output);
     }
 
     private TextComponent componentForPlugin(PluginDescription description) {
       String pluginInfo = description.getName().orElse(description.getId())
           + description.getVersion().map(v -> " " + v).orElse("");
 
-      TextComponent.Builder hoverText = TextComponent.builder(pluginInfo);
+      TextComponent.Builder hoverText = Component.text().content(pluginInfo);
 
       description.getUrl().ifPresent(url -> {
-        hoverText.append(TextComponent.newline());
-        hoverText.append(TextComponent.of("Website: " + url));
+        hoverText.append(Component.newline());
+        hoverText.append(Component.translatable(
+            "velocity.command.plugin-tooltip-website",
+            Component.text(url)));
       });
       if (!description.getAuthors().isEmpty()) {
-        hoverText.append(TextComponent.newline());
+        hoverText.append(Component.newline());
         if (description.getAuthors().size() == 1) {
-          hoverText.append(TextComponent.of("Author: " + description.getAuthors().get(0)));
+          hoverText.append(Component.translatable("velocity.command.plugin-tooltip-author",
+              Component.text(description.getAuthors().get(0))));
         } else {
-          hoverText.append(TextComponent.of("Authors: " + Joiner.on(", ")
-              .join(description.getAuthors())));
+          hoverText.append(
+              Component.translatable("velocity.command.plugin-tooltip-author",
+                  Component.text(String.join(", ", description.getAuthors()))
+              )
+          );
         }
       }
       description.getDescription().ifPresent(pdesc -> {
-        hoverText.append(TextComponent.newline());
-        hoverText.append(TextComponent.newline());
-        hoverText.append(TextComponent.of(pdesc));
+        hoverText.append(Component.newline());
+        hoverText.append(Component.newline());
+        hoverText.append(Component.text(pdesc));
       });
 
-      return TextComponent.of(description.getId(), NamedTextColor.GRAY)
+      return Component.text(description.getId(), NamedTextColor.GRAY)
           .hoverEvent(HoverEvent.showText(hoverText.build()));
+    }
+
+    @Override
+    public boolean hasPermission(final CommandSource source, final String @NonNull [] args) {
+      return source.getPermissionValue("velocity.command.plugins") == Tristate.TRUE;
+    }
+  }
+
+  private static class Dump implements SubCommand {
+
+    private static final Logger logger = LogManager.getLogger(Dump.class);
+    private final ProxyServer server;
+
+    private Dump(ProxyServer server) {
+      this.server = server;
+    }
+
+    @Override
+    public void execute(CommandSource source, String @NonNull [] args) {
+      if (args.length != 0) {
+        source.sendMessage(Identity.nil(), Component.text("/velocity dump", NamedTextColor.RED));
+        return;
+      }
+
+      Collection<RegisteredServer> allServers = ImmutableSet.copyOf(server.getAllServers());
+      JsonObject servers = new JsonObject();
+      for (RegisteredServer iter : allServers) {
+        servers.add(iter.getServerInfo().getName(),
+                InformationUtils.collectServerInfo(iter));
+      }
+      JsonArray connectOrder = new JsonArray();
+      List<String> attemptedConnectionOrder = ImmutableList.copyOf(
+              server.getConfiguration().getAttemptConnectionOrder());
+      for (String s : attemptedConnectionOrder) {
+        connectOrder.add(s);
+      }
+
+      JsonObject proxyConfig = InformationUtils.collectProxyConfig(server.getConfiguration());
+      proxyConfig.add("servers", servers);
+      proxyConfig.add("connectOrder", connectOrder);
+      proxyConfig.add("forcedHosts",
+              InformationUtils.collectForcedHosts(server.getConfiguration()));
+
+      JsonObject dump = new JsonObject();
+      dump.add("versionInfo", InformationUtils.collectProxyInfo(server.getVersion()));
+      dump.add("platform", InformationUtils.collectEnvironmentInfo());
+      dump.add("config", proxyConfig);
+      dump.add("plugins", InformationUtils.collectPluginInfo(server));
+
+      source.sendMessage(Component.text().content("Uploading gathered information...").build());
+      AsyncHttpClient httpClient = ((VelocityServer) server).getAsyncHttpClient();
+
+      BoundRequestBuilder request =
+              httpClient.preparePost("https://dump.velocitypowered.com/documents");
+      request.setHeader("Content-Type", "text/plain");
+      request.addHeader("User-Agent", server.getVersion().getName() + "/"
+              + server.getVersion().getVersion());
+      request.setBody(
+              InformationUtils.toHumanReadableString(dump).getBytes(StandardCharsets.UTF_8));
+
+      ListenableFuture<Response> future = request.execute();
+      future.addListener(() -> {
+        try {
+          Response response = future.get();
+          if (response.getStatusCode() != 200) {
+            source.sendMessage(Component.text()
+                    .content("An error occurred while communicating with the Velocity servers. "
+                            + "The servers may be temporarily unavailable or there is an issue "
+                            + "with your network settings. You can find more information in the "
+                            + "log or console of your Velocity server.")
+                    .color(NamedTextColor.RED).build());
+            logger.error("Invalid status code while POST-ing Velocity dump: "
+                    + response.getStatusCode());
+            logger.error("Headers: \n--------------BEGIN HEADERS--------------\n"
+                    + response.getHeaders().toString()
+                    + "\n---------------END HEADERS---------------");
+            return;
+          }
+          JsonObject key = InformationUtils.parseString(
+                  response.getResponseBody(StandardCharsets.UTF_8));
+          if (!key.has("key")) {
+            throw new JsonSyntaxException("Missing Dump-Url-response");
+          }
+          String url = "https://dump.velocitypowered.com/"
+                  + key.get("key").getAsString() + ".json";
+          source.sendMessage(Component.text()
+                  .content("Created an anonymised report containing useful information about "
+                          + "this proxy. If a developer requested it, you may share the "
+                          + "following link with them:")
+                  .append(Component.newline())
+                  .append(Component.text(">> " + url)
+                          .color(NamedTextColor.GREEN)
+                          .clickEvent(ClickEvent.openUrl(url)))
+                 .append(Component.newline())
+                 .append(Component.text("Note: This link is only valid for a few days")
+                          .color(NamedTextColor.GRAY)
+                 ).build());
+        } catch (InterruptedException e) {
+          source.sendMessage(Component.text()
+                  .content("Could not complete the request, the command was interrupted."
+                          + "Please refer to the proxy-log or console for more information.")
+                  .color(NamedTextColor.RED).build());
+          logger.error("Failed to complete dump command, "
+                  + "the executor was interrupted: " + e.getMessage());
+          e.printStackTrace();
+        } catch (ExecutionException e) {
+          TextComponent.Builder message = Component.text()
+                  .content("An error occurred while attempting to upload the gathered "
+                          + "information to the Velocity servers.")
+                  .append(Component.newline())
+                  .color(NamedTextColor.RED);
+          if (e.getCause() instanceof UnknownHostException
+              || e.getCause() instanceof ConnectException) {
+            message.append(Component.text(
+                    "Likely cause: Invalid system DNS settings or no internet connection"));
+          }
+          source.sendMessage(message
+                  .append(Component.newline()
+                  .append(Component.text(
+                          "Error details can be found in the proxy log / console"))
+                  ).build());
+
+          logger.error("Failed to complete dump command, "
+                  + "the executor encountered an Exception: " + e.getCause().getMessage());
+          e.getCause().printStackTrace();
+        } catch (JsonParseException e) {
+          source.sendMessage(Component.text()
+                  .content("An error occurred on the Velocity servers and the dump could not "
+                          + "be completed. Please contact the Velocity staff about this problem. "
+                          + "If you do, provide the details about this error from the Velocity "
+                          + "console or server log.")
+                  .color(NamedTextColor.RED).build());
+          logger.error("Invalid response from the Velocity servers: " + e.getMessage());
+          e.printStackTrace();
+        }
+      }, MoreExecutors.directExecutor());
     }
 
     @Override

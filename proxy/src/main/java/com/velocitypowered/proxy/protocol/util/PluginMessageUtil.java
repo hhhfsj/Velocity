@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.protocol.util;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -63,27 +80,6 @@ public final class PluginMessageUtil {
   }
 
   /**
-   * Determines whether or not this plugin message is a legacy (<1.13) registration plugin message.
-   * @param message the plugin message
-   * @return whether this is a legacy register message
-   */
-  public static boolean isLegacyRegister(PluginMessage message) {
-    checkNotNull(message, "message");
-    return message.getChannel().equals(REGISTER_CHANNEL_LEGACY);
-  }
-
-  /**
-   * Determines whether or not this plugin message is a legacy (<1.13) unregistration plugin
-   * message.
-   * @param message the plugin message
-   * @return whether this is a legacy unregister message
-   */
-  public static boolean isLegacyUnregister(PluginMessage message) {
-    checkNotNull(message, "message");
-    return message.getChannel().equals(UNREGISTER_CHANNEL_LEGACY);
-  }
-
-  /**
    * Fetches all the channels in a register or unregister plugin message.
    * @param message the message to get the channels from
    * @return the channels, as an immutable list
@@ -143,11 +139,15 @@ public final class PluginMessageUtil {
     return new PluginMessage(message.getChannel(), rewrittenBuf);
   }
 
-  private static String readBrandMessage(ByteBuf content) {
-    // Some clients (mostly poorly-implemented bots) do not send validly-formed brand messages.
-    // In order to accommodate their broken behavior, we'll first try to read in the 1.8 format, and
-    // if that fails, treat it as a 1.7-format message (which has no prefixed length). (The message
-    // Velocity sends will be in the correct format depending on the protocol.)
+  /**
+   * Some clients (mostly poorly-implemented bots) do not send validly-formed brand messages.
+   * In order to accommodate their broken behavior, we'll first try to read in the 1.8 format, and
+   * if that fails, treat it as a 1.7-format message (which has no prefixed length). (The message
+   * Velocity sends will be in the correct format depending on the protocol.)
+   * @param content the brand packet
+   * @return the client brand
+   */
+  public static String readBrandMessage(ByteBuf content) {
     try {
       return ProtocolUtils.readString(content.slice());
     } catch (Exception e) {

@@ -1,7 +1,25 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.connection.backend;
 
 import static com.velocitypowered.proxy.connection.backend.BungeeCordMessageResponder.getBungeeCordChannel;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.tree.CommandNode;
@@ -11,10 +29,13 @@ import com.velocitypowered.api.event.command.PlayerAvailableCommandsEvent;
 import com.velocitypowered.api.event.connection.PluginMessageEvent;
 import com.velocitypowered.api.network.ProtocolVersion;
 import com.velocitypowered.api.proxy.messages.ChannelIdentifier;
+import com.velocitypowered.api.proxy.player.ResourcePackInfo;
 import com.velocitypowered.proxy.VelocityServer;
+import com.velocitypowered.proxy.command.CommandGraphInjector;
 import com.velocitypowered.proxy.connection.MinecraftConnection;
 import com.velocitypowered.proxy.connection.MinecraftSessionHandler;
 import com.velocitypowered.proxy.connection.client.ClientPlaySessionHandler;
+import com.velocitypowered.proxy.connection.player.VelocityResourcePackInfo;
 import com.velocitypowered.proxy.connection.util.ConnectionMessages;
 import com.velocitypowered.proxy.protocol.MinecraftPacket;
 import com.velocitypowered.proxy.protocol.packet.AvailableCommands;
@@ -23,25 +44,35 @@ import com.velocitypowered.proxy.protocol.packet.Disconnect;
 import com.velocitypowered.proxy.protocol.packet.KeepAlive;
 import com.velocitypowered.proxy.protocol.packet.PlayerListItem;
 import com.velocitypowered.proxy.protocol.packet.PluginMessage;
+import com.velocitypowered.proxy.protocol.packet.ResourcePackRequest;
 import com.velocitypowered.proxy.protocol.packet.TabCompleteResponse;
 import com.velocitypowered.proxy.protocol.util.PluginMessageUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
 import io.netty.handler.timeout.ReadTimeoutException;
 import java.util.Collection;
+import java.util.regex.Pattern;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 public class BackendPlaySessionHandler implements MinecraftSessionHandler {
 
+  private static final Pattern PLAUSIBLE_SHA1_HASH = Pattern.compile("^[a-z0-9]{40}$");
   private static final Logger logger = LogManager.getLogger(BackendPlaySessionHandler.class);
+  private static final boolean BACKPRESSURE_LOG = Boolean
+      .getBoolean("velocity.log-server-backpressure");
+  private static final int MAXIMUM_PACKETS_TO_FLUSH = Integer
+      .getInteger("velocity.max-packets-per-flush", 8192);
+
   private final VelocityServer server;
   private final VelocityServerConnection serverConn;
   private final ClientPlaySessionHandler playerSessionHandler;
   private final MinecraftConnection playerConnection;
   private final BungeeCordMessageResponder bungeecordMessageResponder;
   private boolean exceptionTriggered = false;
+  private int packetsFlushed;
 
   BackendPlaySessionHandler(VelocityServer server, VelocityServerConnection serverConn) {
     this.server = server;
@@ -62,10 +93,13 @@ public class BackendPlaySessionHandler implements MinecraftSessionHandler {
   @Override
   public void activated() {
     serverConn.getServer().addPlayer(serverConn.getPlayer());
-    MinecraftConnection serverMc = serverConn.ensureConnected();
-    serverMc.write(PluginMessageUtil.constructChannelsPacket(serverMc.getProtocolVersion(),
-        ImmutableList.of(getBungeeCordChannel(serverMc.getProtocolVersion()))
-    ));
+
+    if (server.getConfiguration().isBungeePluginChannelEnabled()) {
+      MinecraftConnection serverMc = serverConn.ensureConnected();
+      serverMc.write(PluginMessageUtil.constructChannelsPacket(serverMc.getProtocolVersion(),
+          ImmutableList.of(getBungeeCordChannel(serverMc.getProtocolVersion()))
+      ));
+    }
   }
 
   @Override
@@ -80,7 +114,7 @@ public class BackendPlaySessionHandler implements MinecraftSessionHandler {
 
   @Override
   public boolean handle(KeepAlive packet) {
-    serverConn.setLastPingId(packet.getRandomId());
+    serverConn.getPendingPings().put(packet.getRandomId(), System.currentTimeMillis());
     return false; // forwards on
   }
 
@@ -102,13 +136,25 @@ public class BackendPlaySessionHandler implements MinecraftSessionHandler {
   }
 
   @Override
-  public boolean handle(PluginMessage packet) {
-    if (bungeecordMessageResponder.process(packet)) {
-      return true;
+  public boolean handle(ResourcePackRequest packet) {
+    ResourcePackInfo.Builder builder = new VelocityResourcePackInfo.BuilderImpl(
+        Preconditions.checkNotNull(packet.getUrl()))
+        .setPrompt(packet.getPrompt())
+        .setShouldForce(packet.isRequired());
+    // Why SpotBugs decides that this is unsafe I have no idea;
+    if (packet.getHash() != null && !Preconditions.checkNotNull(packet.getHash()).isEmpty()) {
+      if (PLAUSIBLE_SHA1_HASH.matcher(packet.getHash()).matches()) {
+        builder.setHash(ByteBufUtil.decodeHexDump(packet.getHash()));
+      }
     }
 
-    if (!serverConn.getPlayer().canForwardPluginMessage(serverConn.ensureConnected()
-        .getProtocolVersion(), packet)) {
+    serverConn.getPlayer().queueResourcePack(builder.build());
+    return true;
+  }
+
+  @Override
+  public boolean handle(PluginMessage packet) {
+    if (bungeecordMessageResponder.process(packet)) {
       return true;
     }
 
@@ -149,7 +195,11 @@ public class BackendPlaySessionHandler implements MinecraftSessionHandler {
                 Unpooled.wrappedBuffer(copy));
             playerConnection.write(copied);
           }
-        }, playerConnection.eventLoop());
+        }, playerConnection.eventLoop())
+        .exceptionally((ex) -> {
+          logger.error("Exception while handling plugin message {}", packet, ex);
+          return null;
+        });
     return true;
   }
 
@@ -162,7 +212,7 @@ public class BackendPlaySessionHandler implements MinecraftSessionHandler {
   @Override
   public boolean handle(PlayerListItem packet) {
     serverConn.getPlayer().getTabList().processBackendPacket(packet);
-    return false; //Forward packet to player
+    return false;
   }
 
   @Override
@@ -170,68 +220,18 @@ public class BackendPlaySessionHandler implements MinecraftSessionHandler {
     RootCommandNode<CommandSource> rootNode = commands.getRootNode();
     if (server.getConfiguration().isAnnounceProxyCommands()) {
       // Inject commands from the proxy.
-      RootCommandNode<CommandSource> dispatcherRootNode =
-          (RootCommandNode<CommandSource>)
-              filterNode(server.getCommandManager().getDispatcher().getRoot());
-      assert dispatcherRootNode != null : "Filtering root node returned null.";
-      Collection<CommandNode<CommandSource>> proxyNodes = dispatcherRootNode.getChildren();
-      for (CommandNode<CommandSource> node : proxyNodes) {
-        CommandNode<CommandSource> existingServerChild = rootNode.getChild(node.getName());
-        if (existingServerChild != null) {
-          rootNode.getChildren().remove(existingServerChild);
-        }
-        rootNode.addChild(node);
-      }
+      final CommandGraphInjector<CommandSource> injector = server.getCommandManager().getInjector();
+      injector.inject(rootNode, serverConn.getPlayer());
     }
 
     server.getEventManager().fire(
         new PlayerAvailableCommandsEvent(serverConn.getPlayer(), rootNode))
-        .thenAcceptAsync(event -> playerConnection.write(commands), playerConnection.eventLoop());
+        .thenAcceptAsync(event -> playerConnection.write(commands), playerConnection.eventLoop())
+        .exceptionally((ex) -> {
+          logger.error("Exception while handling available commands for {}", playerConnection, ex);
+          return null;
+        });
     return true;
-  }
-
-  /**
-   * Creates a deep copy of the provided command node, but removes any node that are not accessible
-   * by the player (respecting the requirement of the node).
-   *
-   * @param source source node
-   * @return filtered node
-   */
-  private CommandNode<CommandSource> filterNode(CommandNode<CommandSource> source) {
-    CommandNode<CommandSource> dest;
-    if (source instanceof RootCommandNode) {
-      dest = new RootCommandNode<>();
-    } else {
-      if (source.getRequirement() != null) {
-        try {
-          if (!source.getRequirement().test(serverConn.getPlayer())) {
-            return null;
-          }
-        } catch (Throwable e) {
-          // swallow everything because plugins
-          logger.error(
-              "Requirement test for command node " + source + " encountered an exception", e);
-        }
-      }
-
-      ArgumentBuilder<CommandSource, ?> destChildBuilder = source.createBuilder();
-      destChildBuilder.requires((commandSource) -> true);
-      if (destChildBuilder.getRedirect() != null) {
-        destChildBuilder.redirect(filterNode(destChildBuilder.getRedirect()));
-      }
-
-      dest = destChildBuilder.build();
-    }
-
-    for (CommandNode<CommandSource> sourceChild : source.getChildren()) {
-      CommandNode<CommandSource> destChild = filterNode(sourceChild);
-      if (destChild == null) {
-        continue;
-      }
-      dest.addChild(destChild);
-    }
-
-    return dest;
   }
 
   @Override
@@ -240,16 +240,25 @@ public class BackendPlaySessionHandler implements MinecraftSessionHandler {
       ((PluginMessage) packet).retain();
     }
     playerConnection.delayedWrite(packet);
+    if (++packetsFlushed >= MAXIMUM_PACKETS_TO_FLUSH) {
+      playerConnection.flush();
+      packetsFlushed = 0;
+    }
   }
 
   @Override
   public void handleUnknown(ByteBuf buf) {
     playerConnection.delayedWrite(buf.retain());
+    if (++packetsFlushed >= MAXIMUM_PACKETS_TO_FLUSH) {
+      playerConnection.flush();
+      packetsFlushed = 0;
+    }
   }
 
   @Override
   public void readCompleted() {
     playerConnection.flush();
+    packetsFlushed = 0;
   }
 
   @Override
@@ -275,5 +284,21 @@ public class BackendPlaySessionHandler implements MinecraftSessionHandler {
         serverConn.getPlayer().disconnect(ConnectionMessages.INTERNAL_SERVER_CONNECTION_ERROR);
       }
     }
+  }
+
+  @Override
+  public void writabilityChanged() {
+    Channel serverChan = serverConn.ensureConnected().getChannel();
+    boolean writable = serverChan.isWritable();
+
+    if (BACKPRESSURE_LOG) {
+      if (writable) {
+        logger.info("{} is not writable, not auto-reading player connection data", this.serverConn);
+      } else {
+        logger.info("{} is writable, will auto-read player connection data", this.serverConn);
+      }
+    }
+
+    playerConnection.setAutoReading(writable);
   }
 }

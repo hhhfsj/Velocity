@@ -1,9 +1,15 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * The Velocity API is licensed under the terms of the MIT License. For more details,
+ * reference the LICENSE file in the api top-level directory.
+ */
+
 package com.velocitypowered.api.proxy;
 
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import net.kyori.text.Component;
 
 /**
  * Provides a fluent interface to send a connection request to another server on the proxy. A
@@ -62,15 +68,6 @@ public interface ConnectionRequestBuilder {
      * @return the status for this result
      */
     Status getStatus();
-
-    /**
-     * Returns an (optional) textual reason for the failure to connect to the server.
-     *
-     * @return the reason why the user could not connect to the server
-     * @deprecated Use {@link #getReasonComponent()} instead
-     */
-    @Deprecated
-    Optional<Component> getReason();
 
     /**
      * Returns an (optional) textual reason for the failure to connect to the server.

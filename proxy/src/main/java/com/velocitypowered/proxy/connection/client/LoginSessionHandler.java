@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.connection.client;
 
 import static com.google.common.net.UrlEscapers.urlFormParameterEscaper;
@@ -17,6 +34,7 @@ import com.velocitypowered.api.event.connection.PreLoginEvent.PreLoginComponentR
 import com.velocitypowered.api.event.permission.PermissionsSetupEvent;
 import com.velocitypowered.api.event.player.GameProfileRequestEvent;
 import com.velocitypowered.api.event.player.PlayerChooseInitialServerEvent;
+import com.velocitypowered.api.permission.PermissionFunction;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.util.GameProfile;
 import com.velocitypowered.proxy.VelocityServer;
@@ -31,12 +49,16 @@ import io.netty.buffer.ByteBuf;
 import java.net.InetSocketAddress;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
+import java.security.MessageDigest;
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.translation.GlobalTranslator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.asynchttpclient.ListenableFuture;
@@ -47,7 +69,8 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
 
   private static final Logger logger = LogManager.getLogger(LoginSessionHandler.class);
   private static final String MOJANG_HASJOINED_URL =
-      "https://sessionserver.mojang.com/session/minecraft/hasJoined?username=%s&serverId=%s";
+      System.getProperty("mojang.sessionserver", "https://sessionserver.mojang.com/session/minecraft/hasJoined")
+          .concat("?username=%s&serverId=%s");
 
   private final VelocityServer server;
   private final MinecraftConnection mcConnection;
@@ -84,7 +107,7 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
     try {
       KeyPair serverKeyPair = server.getServerKeyPair();
       byte[] decryptedVerifyToken = decryptRsa(serverKeyPair, packet.getVerifyToken());
-      if (!Arrays.equals(verify, decryptedVerifyToken)) {
+      if (!MessageDigest.isEqual(verify, decryptedVerifyToken)) {
         throw new IllegalStateException("Unable to successfully decrypt the verification token.");
       }
 
@@ -123,7 +146,8 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
                 GameProfile.class), true);
           } else if (profileResponse.getStatusCode() == 204) {
             // Apparently an offline-mode user logged onto this online-mode proxy.
-            inbound.disconnect(server.getConfiguration().getMessages().getOnlineModeOnly());
+            inbound.disconnect(Component.translatable("velocity.error.online-mode-only",
+                NamedTextColor.RED));
           } else {
             // Something else went wrong
             logger.error(
@@ -163,8 +187,7 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
           Optional<Component> disconnectReason = result.getReasonComponent();
           if (disconnectReason.isPresent()) {
             // The component is guaranteed to be provided if the connection was denied.
-            mcConnection.closeWith(Disconnect.create(disconnectReason.get(),
-                inbound.getProtocolVersion()));
+            inbound.disconnect(disconnectReason.get());
             return;
           }
 
@@ -177,7 +200,11 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
           } else {
             initializePlayer(GameProfile.forOfflinePlayer(login.getUsername()), false);
           }
-        }, mcConnection.eventLoop());
+        }, mcConnection.eventLoop())
+        .exceptionally((ex) -> {
+          logger.error("Exception in pre-login stage", ex);
+          return null;
+        });
   }
 
   private EncryptionRequest generateEncryptionRequest() {
@@ -196,8 +223,9 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
         server.getConfiguration().getPlayerInfoForwardingMode());
     GameProfileRequestEvent profileRequestEvent = new GameProfileRequestEvent(inbound, profile,
         onlineMode);
+    final GameProfile finalProfile = profile;
 
-    server.getEventManager().fire(profileRequestEvent).thenCompose(profileEvent -> {
+    server.getEventManager().fire(profileRequestEvent).thenComposeAsync(profileEvent -> {
       if (mcConnection.isClosed()) {
         // The player disconnected after we authenticated them.
         return CompletableFuture.completedFuture(null);
@@ -208,7 +236,8 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
           mcConnection, inbound.getVirtualHost().orElse(null), onlineMode);
       this.connectedPlayer = player;
       if (!server.canRegisterConnection(player)) {
-        player.disconnect0(server.getConfiguration().getMessages().getAlreadyConnected(), true);
+        player.disconnect0(Component.translatable("velocity.error.already-connected-proxy",
+            NamedTextColor.RED), true);
         return CompletableFuture.completedFuture(null);
       }
 
@@ -219,10 +248,23 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
           .thenAcceptAsync(event -> {
             if (!mcConnection.isClosed()) {
               // wait for permissions to load, then set the players permission function
-              player.setPermissionFunction(event.createFunction(player));
+              final PermissionFunction function = event.createFunction(player);
+              if (function == null) {
+                logger.error(
+                    "A plugin permission provider {} provided an invalid permission function"
+                        + " for player {}. This is a bug in the plugin, not in Velocity. Falling"
+                        + " back to the default permission function.",
+                    event.getProvider().getClass().getName(),
+                    player.getUsername());
+              } else {
+                player.setPermissionFunction(function);
+              }
               completeLoginProtocolPhaseAndInitialize(player);
             }
           }, mcConnection.eventLoop());
+    }, mcConnection.eventLoop()).exceptionally((ex) -> {
+      logger.error("Exception during connection of {}", finalProfile, ex);
+      return null;
     });  
   }
 
@@ -247,30 +289,38 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
             player.disconnect0(reason.get(), true);
           } else {
             if (!server.registerConnection(player)) {
-              player.disconnect0(server.getConfiguration().getMessages()
-                      .getAlreadyConnected(), true);
+              player.disconnect0(Component.translatable("velocity.error.already-connected-proxy"),
+                  true);
               return;
             }
 
             mcConnection.setAssociation(player);
             mcConnection.setSessionHandler(new InitialConnectSessionHandler(player));
             server.getEventManager().fire(new PostLoginEvent(player))
-                .thenRun(() -> connectToInitialServer(player));
+                .thenCompose((ignored) -> connectToInitialServer(player))
+                .exceptionally((ex) -> {
+                  logger.error("Exception while connecting {} to initial server", player, ex);
+                  return null;
+                });
           }
-        }, mcConnection.eventLoop());
+        }, mcConnection.eventLoop())
+        .exceptionally((ex) -> {
+          logger.error("Exception while completing login initialisation phase for {}", player, ex);
+          return null;
+        });
   }
 
-  private void connectToInitialServer(ConnectedPlayer player) {
+  private CompletableFuture<Void> connectToInitialServer(ConnectedPlayer player) {
     Optional<RegisteredServer> initialFromConfig = player.getNextServerToTry();
     PlayerChooseInitialServerEvent event = new PlayerChooseInitialServerEvent(player,
         initialFromConfig.orElse(null));
 
-    server.getEventManager().fire(event)
+    return server.getEventManager().fire(event)
         .thenRunAsync(() -> {
           Optional<RegisteredServer> toTry = event.getInitialServer();
           if (!toTry.isPresent()) {
-            player.disconnect0(server.getConfiguration().getMessages()
-                    .getNoAvailableServers(), true);
+            player.disconnect0(Component.translatable("velocity.error.no-available-servers",
+                NamedTextColor.RED), true);
             return;
           }
           player.createConnectionRequest(toTry.get()).fireAndForget();

@@ -1,4 +1,16 @@
 /*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * The Velocity API is licensed under the terms of the MIT License. For more details,
+ * reference the LICENSE file in the api top-level directory.
+ */
+
+package com.velocitypowered.api.util;
+
+import java.util.Arrays;
+import java.util.UUID;
+
+/*
  * The MIT License (MIT)
  *
  * Copyright (c) 2018 Jon Chambers
@@ -22,15 +34,10 @@
  * SOFTWARE.
  */
 
-package com.velocitypowered.api.util;
-
-import java.util.Arrays;
-import java.util.UUID;
-
 /**
  * This is a modified FastUUID implementation. The primary difference is that it does not dash its
  * UUIDs. As the native Java 9+ UUID.toString() implementation dashes its UUIDs, we use the FastUUID
- * internal method, which ought to be faster than a String.replace().
+ * methods, which ought to be faster than a String.replace().
  */
 class FastUuidSansHyphens {
 

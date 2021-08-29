@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.plugin;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -41,7 +58,7 @@ public class VelocityPluginManager implements PluginManager {
 
   private static final Logger logger = LogManager.getLogger(VelocityPluginManager.class);
 
-  private final Map<String, PluginContainer> plugins = new HashMap<>();
+  private final Map<String, PluginContainer> plugins = new LinkedHashMap<>();
   private final Map<Object, PluginContainer> pluginInstances = new IdentityHashMap<>();
   private final VelocityServer server;
 
@@ -175,9 +192,12 @@ public class VelocityPluginManager implements PluginManager {
   public void addToClasspath(Object plugin, Path path) {
     checkNotNull(plugin, "instance");
     checkNotNull(path, "path");
-    checkArgument(pluginInstances.containsKey(plugin), "plugin is not loaded");
+    Optional<PluginContainer> optContainer = fromInstance(plugin);
+    checkArgument(optContainer.isPresent(), "plugin is not loaded");
+    Optional<?> optInstance = optContainer.get().getInstance();
+    checkArgument(optInstance.isPresent(), "plugin has no instance");
 
-    ClassLoader pluginClassloader = plugin.getClass().getClassLoader();
+    ClassLoader pluginClassloader = optInstance.get().getClass().getClassLoader();
     if (pluginClassloader instanceof PluginClassLoader) {
       ((PluginClassLoader) pluginClassloader).addPath(path);
     } else {

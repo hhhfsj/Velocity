@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.scheduler;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -7,6 +24,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.velocitypowered.api.plugin.PluginContainer;
 import com.velocitypowered.api.plugin.PluginManager;
 import com.velocitypowered.api.scheduler.ScheduledTask;
 import com.velocitypowered.api.scheduler.Scheduler;
@@ -183,8 +201,18 @@ public class VelocityScheduler implements Scheduler {
         currentTaskThread = Thread.currentThread();
         try {
           runnable.run();
-        } catch (Exception e) {
-          Log.logger.error("Exception in task {} by plugin {}", runnable, plugin, e);
+        } catch (Throwable e) {
+          //noinspection ConstantConditions
+          if (e instanceof InterruptedException) {
+            Thread.currentThread().interrupt();
+          } else {
+            String friendlyPluginName = pluginManager.fromInstance(plugin)
+                .map(container -> container.getDescription().getName()
+                      .orElse(container.getDescription().getId()))
+                .orElse("UNKNOWN");
+            Log.logger.error("Exception in task {} by plugin {}", runnable, friendlyPluginName,
+                e);
+          }
         } finally {
           if (repeat == 0) {
             onFinish();

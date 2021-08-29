@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.natives.compression;
 
 import com.google.common.base.Preconditions;
@@ -9,9 +26,7 @@ public class LibdeflateVelocityCompressor implements VelocityCompressor {
 
   public static final VelocityCompressorFactory FACTORY = LibdeflateVelocityCompressor::new;
 
-  private final NativeZlibInflate inflate = new NativeZlibInflate();
   private final long inflateCtx;
-  private final NativeZlibDeflate deflate = new NativeZlibDeflate();
   private final long deflateCtx;
   private boolean disposed = false;
 
@@ -21,16 +36,14 @@ public class LibdeflateVelocityCompressor implements VelocityCompressor {
       throw new IllegalArgumentException("Invalid compression level " + level);
     }
 
-    this.inflateCtx = inflate.init();
-    this.deflateCtx = deflate.init(correctedLevel);
+    this.inflateCtx = NativeZlibInflate.init();
+    this.deflateCtx = NativeZlibDeflate.init(correctedLevel);
   }
 
   @Override
   public void inflate(ByteBuf source, ByteBuf destination, int uncompressedSize)
       throws DataFormatException {
     ensureNotDisposed();
-    source.memoryAddress();
-    destination.memoryAddress();
 
     // libdeflate recommends we work with a known uncompressed size - so we work strictly within
     // those parameters. If the uncompressed size doesn't match the compressed size, then we will
@@ -40,7 +53,7 @@ public class LibdeflateVelocityCompressor implements VelocityCompressor {
     long sourceAddress = source.memoryAddress() + source.readerIndex();
     long destinationAddress = destination.memoryAddress() + destination.writerIndex();
 
-    inflate.process(inflateCtx, sourceAddress, source.readableBytes(), destinationAddress,
+    NativeZlibInflate.process(inflateCtx, sourceAddress, source.readableBytes(), destinationAddress,
         uncompressedSize);
     destination.writerIndex(destination.writerIndex() + uncompressedSize);
   }
@@ -53,7 +66,7 @@ public class LibdeflateVelocityCompressor implements VelocityCompressor {
       long sourceAddress = source.memoryAddress() + source.readerIndex();
       long destinationAddress = destination.memoryAddress() + destination.writerIndex();
 
-      int produced = deflate.process(deflateCtx, sourceAddress, source.readableBytes(),
+      int produced = NativeZlibDeflate.process(deflateCtx, sourceAddress, source.readableBytes(),
           destinationAddress, destination.writableBytes());
       if (produced > 0) {
         destination.writerIndex(destination.writerIndex() + produced);
@@ -72,8 +85,8 @@ public class LibdeflateVelocityCompressor implements VelocityCompressor {
   @Override
   public void close() {
     if (!disposed) {
-      inflate.free(inflateCtx);
-      deflate.free(deflateCtx);
+      NativeZlibInflate.free(inflateCtx);
+      NativeZlibDeflate.free(deflateCtx);
     }
     disposed = true;
   }

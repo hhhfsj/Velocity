@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.connection.client;
 
 import com.google.common.collect.ImmutableList;
@@ -24,6 +41,7 @@ import io.netty.buffer.ByteBuf;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import org.apache.logging.log4j.LogManager;
@@ -120,6 +138,10 @@ public class StatusSessionHandler implements MinecraftSessionHandler {
               continue;
             }
 
+            if (response.getDescriptionComponent() == null) {
+              continue;
+            }
+
             return new ServerPing(
                 fallback.getVersion(),
                 fallback.getPlayers().orElse(null),
@@ -146,6 +168,7 @@ public class StatusSessionHandler implements MinecraftSessionHandler {
       return CompletableFuture.completedFuture(constructLocalPing(shownVersion));
     } else {
       String virtualHostStr = inbound.getVirtualHost().map(InetSocketAddress::getHostString)
+          .map(str -> str.toLowerCase(Locale.ROOT))
           .orElse("");
       List<String> serversToTry = server.getConfiguration().getForcedHosts().getOrDefault(
           virtualHostStr, server.getConfiguration().getAttemptConnectionOrder());
@@ -163,7 +186,11 @@ public class StatusSessionHandler implements MinecraftSessionHandler {
         .thenCompose(ping -> server.getEventManager().fire(new ProxyPingEvent(inbound, ping)))
         .thenAcceptAsync(event -> connection.closeWith(
             LegacyDisconnect.fromServerPing(event.getPing(), packet.getVersion())),
-            connection.eventLoop());
+            connection.eventLoop())
+        .exceptionally((ex) -> {
+          logger.error("Exception while handling legacy ping {}", packet, ex);
+          return null;
+        });
     return true;
   }
 
@@ -189,7 +216,11 @@ public class StatusSessionHandler implements MinecraftSessionHandler {
                   .toJson(event.getPing(), json);
               connection.write(new StatusResponse(json));
             },
-            connection.eventLoop());
+            connection.eventLoop())
+        .exceptionally((ex) -> {
+          logger.error("Exception while handling status request {}", packet, ex);
+          return null;
+        });
     return true;
   }
 

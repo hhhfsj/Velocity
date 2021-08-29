@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.server;
 
 import com.google.common.base.Preconditions;
@@ -38,6 +55,17 @@ public class ServerMap {
   }
 
   /**
+   * Creates a raw implementation of a {@link RegisteredServer} without
+   *  tying it to the internal server map.
+   *
+   * @param serverInfo the server to create a registered server with
+   * @return the {@link RegisteredServer} built from the {@link ServerInfo}
+   */
+  public RegisteredServer createRawRegisteredServer(ServerInfo serverInfo) {
+    return new VelocityRegisteredServer(server, serverInfo);
+  }
+
+  /**
    * Registers a server with the proxy.
    *
    * @param serverInfo the server to register
@@ -46,7 +74,7 @@ public class ServerMap {
   public RegisteredServer register(ServerInfo serverInfo) {
     Preconditions.checkNotNull(serverInfo, "serverInfo");
     String lowerName = serverInfo.getName().toLowerCase(Locale.US);
-    VelocityRegisteredServer rs = new VelocityRegisteredServer(server, serverInfo);
+    RegisteredServer rs = createRawRegisteredServer(serverInfo);
 
     RegisteredServer existing = servers.putIfAbsent(lowerName, rs);
     if (existing != null && !existing.getServerInfo().equals(serverInfo)) {

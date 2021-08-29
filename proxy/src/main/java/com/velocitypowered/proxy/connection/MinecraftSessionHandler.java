@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.connection;
 
 import com.velocitypowered.proxy.protocol.MinecraftPacket;
@@ -29,7 +46,12 @@ import com.velocitypowered.proxy.protocol.packet.StatusRequest;
 import com.velocitypowered.proxy.protocol.packet.StatusResponse;
 import com.velocitypowered.proxy.protocol.packet.TabCompleteRequest;
 import com.velocitypowered.proxy.protocol.packet.TabCompleteResponse;
-import com.velocitypowered.proxy.protocol.packet.TitlePacket;
+import com.velocitypowered.proxy.protocol.packet.title.LegacyTitlePacket;
+import com.velocitypowered.proxy.protocol.packet.title.TitleActionbarPacket;
+import com.velocitypowered.proxy.protocol.packet.title.TitleClearPacket;
+import com.velocitypowered.proxy.protocol.packet.title.TitleSubtitlePacket;
+import com.velocitypowered.proxy.protocol.packet.title.TitleTextPacket;
+import com.velocitypowered.proxy.protocol.packet.title.TitleTimesPacket;
 import io.netty.buffer.ByteBuf;
 
 public interface MinecraftSessionHandler {
@@ -174,7 +196,27 @@ public interface MinecraftSessionHandler {
     return false;
   }
 
-  default boolean handle(TitlePacket packet) {
+  default boolean handle(LegacyTitlePacket packet) {
+    return false;
+  }
+
+  default boolean handle(TitleTextPacket packet) {
+    return false;
+  }
+
+  default boolean handle(TitleSubtitlePacket packet) {
+    return false;
+  }
+
+  default boolean handle(TitleActionbarPacket packet) {
+    return false;
+  }
+
+  default boolean handle(TitleTimesPacket packet) {
+    return false;
+  }
+
+  default boolean handle(TitleClearPacket packet) {
     return false;
   }
 

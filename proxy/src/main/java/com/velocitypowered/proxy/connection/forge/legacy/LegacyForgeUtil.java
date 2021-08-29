@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.connection.forge.legacy;
 
 import static com.velocitypowered.proxy.connection.forge.legacy.LegacyForgeConstants.FORGE_LEGACY_HANDSHAKE_CHANNEL;
@@ -39,31 +56,25 @@ class LegacyForgeUtil {
    */
   static List<ModInfo.Mod> readModList(PluginMessage message) {
     Preconditions.checkNotNull(message, "message");
-    Preconditions
-        .checkArgument(message.getChannel().equals(FORGE_LEGACY_HANDSHAKE_CHANNEL),
+    Preconditions.checkArgument(message.getChannel().equals(FORGE_LEGACY_HANDSHAKE_CHANNEL),
             "message is not a FML HS plugin message");
 
-    ByteBuf byteBuf = message.content().retainedSlice();
-    try {
-      byte discriminator = byteBuf.readByte();
+    ByteBuf contents = message.content().slice();
+    byte discriminator = contents.readByte();
+    if (discriminator == MOD_LIST_DISCRIMINATOR) {
+      ImmutableList.Builder<ModInfo.Mod> mods = ImmutableList.builder();
+      int modCount = ProtocolUtils.readVarInt(contents);
 
-      if (discriminator == MOD_LIST_DISCRIMINATOR) {
-        ImmutableList.Builder<ModInfo.Mod> mods = ImmutableList.builder();
-        int modCount = ProtocolUtils.readVarInt(byteBuf);
-
-        for (int index = 0; index < modCount; index++) {
-          String id = ProtocolUtils.readString(byteBuf);
-          String version = ProtocolUtils.readString(byteBuf);
-          mods.add(new ModInfo.Mod(id, version));
-        }
-
-        return mods.build();
+      for (int index = 0; index < modCount; index++) {
+        String id = ProtocolUtils.readString(contents);
+        String version = ProtocolUtils.readString(contents);
+        mods.add(new ModInfo.Mod(id, version));
       }
 
-      return ImmutableList.of();
-    } finally {
-      byteBuf.release();
+      return mods.build();
     }
+
+    return ImmutableList.of();
   }
 
   /**

@@ -1,5 +1,13 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * The Velocity API is licensed under the terms of the MIT License. For more details,
+ * reference the LICENSE file in the api top-level directory.
+ */
+
 package com.velocitypowered.api.permission;
 
+import net.kyori.adventure.util.TriState;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
@@ -73,5 +81,22 @@ public enum Tristate {
    */
   public boolean asBoolean() {
     return this.booleanValue;
+  }
+
+  /**
+   * Returns the equivalent Adventure {@link TriState}.
+   *
+   * @return equivalent Adventure TriState
+   */
+  public TriState toAdventureTriState() {
+    if (this == Tristate.TRUE) {
+      return TriState.TRUE;
+    } else if (this == Tristate.UNDEFINED) {
+      return TriState.NOT_SET;
+    } else if (this == Tristate.FALSE) {
+      return TriState.FALSE;
+    } else {
+      throw new IllegalArgumentException();
+    }
   }
 }

@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.protocol.packet.brigadier;
 
 import static com.velocitypowered.proxy.protocol.packet.brigadier.DoubleArgumentPropertySerializer.DOUBLE;
@@ -5,6 +22,7 @@ import static com.velocitypowered.proxy.protocol.packet.brigadier.EmptyArgumentP
 import static com.velocitypowered.proxy.protocol.packet.brigadier.FloatArgumentPropertySerializer.FLOAT;
 import static com.velocitypowered.proxy.protocol.packet.brigadier.IntegerArgumentPropertySerializer.INTEGER;
 import static com.velocitypowered.proxy.protocol.packet.brigadier.LongArgumentPropertySerializer.LONG;
+import static com.velocitypowered.proxy.protocol.packet.brigadier.ModArgumentPropertySerializer.MOD;
 import static com.velocitypowered.proxy.protocol.packet.brigadier.StringArgumentPropertySerializer.STRING;
 
 import com.mojang.brigadier.arguments.ArgumentType;
@@ -18,6 +36,7 @@ import com.velocitypowered.proxy.protocol.ProtocolUtils;
 import io.netty.buffer.ByteBuf;
 import java.util.HashMap;
 import java.util.Map;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class ArgumentPropertyRegistry {
   private ArgumentPropertyRegistry() {
@@ -81,6 +100,10 @@ public class ArgumentPropertyRegistry {
       if (property.getResult() != null) {
         property.getSerializer().serialize(property.getResult(), buf);
       }
+    } else if (type instanceof ModArgumentProperty) {
+      ModArgumentProperty property = (ModArgumentProperty) type;
+      ProtocolUtils.writeString(buf, property.getIdentifier());
+      buf.writeBytes(property.getData());
     } else {
       ArgumentPropertySerializer serializer = byClass.get(type.getClass());
       String id = classToId.get(type.getClass());
@@ -100,8 +123,21 @@ public class ArgumentPropertyRegistry {
     register("brigadier:float", FloatArgumentType.class, FLOAT);
     register("brigadier:double", DoubleArgumentType.class, DOUBLE);
     register("brigadier:bool", BoolArgumentType.class,
-        GenericArgumentPropertySerializer.create(BoolArgumentType::bool));
+        new ArgumentPropertySerializer<>() {
+          @Override
+          public BoolArgumentType deserialize(ByteBuf buf) {
+            return BoolArgumentType.bool();
+          }
+
+          @Override
+          public void serialize(BoolArgumentType object, ByteBuf buf) {
+
+          }
+        });
     register("brigadier:long", LongArgumentType.class, LONG);
+
+    // Crossstitch support
+    register("crossstitch:mod_argument", ModArgumentProperty.class, MOD);
 
     // Minecraft argument types with extra properties
     empty("minecraft:entity", ByteArgumentPropertySerializer.BYTE);

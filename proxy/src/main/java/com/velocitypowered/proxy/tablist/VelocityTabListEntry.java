@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.tablist;
 
 import com.velocitypowered.api.proxy.player.TabList;
@@ -5,8 +22,6 @@ import com.velocitypowered.api.proxy.player.TabListEntry;
 import com.velocitypowered.api.util.GameProfile;
 import com.velocitypowered.proxy.protocol.packet.PlayerListItem;
 import java.util.Optional;
-import net.kyori.adventure.text.serializer.legacytext3.LegacyText3ComponentSerializer;
-import net.kyori.text.Component;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class VelocityTabListEntry implements TabListEntry {
@@ -37,21 +52,8 @@ public class VelocityTabListEntry implements TabListEntry {
   }
 
   @Override
-  public Optional<Component> getDisplayName() {
-    return Optional.ofNullable(displayName).map(LegacyText3ComponentSerializer.get()::serialize);
-  }
-
-  @Override
   public Optional<net.kyori.adventure.text.Component> getDisplayNameComponent() {
     return Optional.ofNullable(displayName);
-  }
-
-  @Override
-  public TabListEntry setDisplayName(@Nullable Component displayName) {
-    if (displayName == null) {
-      return this.setDisplayName((net.kyori.adventure.text.Component) null);
-    }
-    return this.setDisplayName(LegacyText3ComponentSerializer.get().deserialize(displayName));
   }
 
   @Override

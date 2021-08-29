@@ -1,9 +1,17 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * The Velocity API is licensed under the terms of the MIT License. For more details,
+ * reference the LICENSE file in the api top-level directory.
+ */
+
 package com.velocitypowered.api.proxy.messages;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import java.util.Objects;
 import java.util.regex.Pattern;
+import net.kyori.adventure.key.Key;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
@@ -12,7 +20,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  */
 public final class MinecraftChannelIdentifier implements ChannelIdentifier {
 
-  private static final Pattern VALID_IDENTIFIER_REGEX = Pattern.compile("[a-z0-9\\-_]*");
+  private static final Pattern VALID_IDENTIFIER_REGEX = Pattern.compile("[a-z0-9/\\-_]*");
 
   private final String namespace;
   private final String name;
@@ -50,12 +58,45 @@ public final class MinecraftChannelIdentifier implements ChannelIdentifier {
     return new MinecraftChannelIdentifier(namespace, name);
   }
 
+  /**
+   * Creates an channel identifier from the specified Minecraft identifier.
+   *
+   * @param identifier the Minecraft identifier
+   * @return a new channel identifier
+   */
+  public static MinecraftChannelIdentifier from(String identifier) {
+    int colonPos = identifier.indexOf(':');
+    if (colonPos == -1) {
+      throw new IllegalArgumentException("Identifier does not contain a colon.");
+    }
+    if (colonPos + 1 == identifier.length()) {
+      throw new IllegalArgumentException("Identifier is empty.");
+    }
+    String namespace = identifier.substring(0, colonPos);
+    String name = identifier.substring(colonPos + 1);
+    return create(namespace, name);
+  }
+
+  /**
+   * Creates an channel identifier from the specified Minecraft identifier.
+   *
+   * @param key the Minecraft key to use
+   * @return a new channel identifier
+   */
+  public static MinecraftChannelIdentifier from(Key key) {
+    return create(key.namespace(), key.value());
+  }
+
   public String getNamespace() {
     return namespace;
   }
 
   public String getName() {
     return name;
+  }
+
+  public Key asKey() {
+    return Key.key(namespace, name);
   }
 
   @Override

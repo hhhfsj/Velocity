@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.connection.client;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -23,6 +40,7 @@ import io.netty.buffer.ByteBuf;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.Optional;
+import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.TranslatableComponent;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -54,8 +72,10 @@ public class HandshakeSessionHandler implements MinecraftSessionHandler {
 
   @Override
   public boolean handle(LegacyHandshake packet) {
-    connection.closeWith(LegacyDisconnect
-        .from(TextComponent.of("Your client is old, please upgrade!", NamedTextColor.RED)));
+    connection.closeWith(LegacyDisconnect.from(Component.text(
+        "Your client is extremely old. Please update to a newer version of Minecraft.",
+        NamedTextColor.RED)
+    ));
     return true;
   }
 
@@ -101,13 +121,14 @@ public class HandshakeSessionHandler implements MinecraftSessionHandler {
 
   private void handleLogin(Handshake handshake, InitialInboundConnection ic) {
     if (!ProtocolVersion.isSupported(handshake.getProtocolVersion())) {
-      ic.disconnectQuietly(TranslatableComponent.of("multiplayer.disconnect.outdated_client"));
+      ic.disconnectQuietly(Component.translatable("multiplayer.disconnect.outdated_client")
+          .args(Component.text(ProtocolVersion.SUPPORTED_VERSION_STRING)));
       return;
     }
 
     InetAddress address = ((InetSocketAddress) connection.getRemoteAddress()).getAddress();
     if (!server.getIpAttemptLimiter().attempt(address)) {
-      ic.disconnectQuietly(TextComponent.of("You are logging in too fast, try again later."));
+      ic.disconnectQuietly(Component.translatable("velocity.error.logging-in-too-fast"));
       return;
     }
 
@@ -117,7 +138,8 @@ public class HandshakeSessionHandler implements MinecraftSessionHandler {
     // and lower, otherwise IP information will never get forwarded.
     if (server.getConfiguration().getPlayerInfoForwardingMode() == PlayerInfoForwarding.MODERN
         && handshake.getProtocolVersion().compareTo(ProtocolVersion.MINECRAFT_1_13) < 0) {
-      ic.disconnectQuietly(TextComponent.of("This server is only compatible with 1.13 and above."));
+      ic.disconnectQuietly(Component.translatable(
+          "velocity.error.modern-forwarding-needs-new-client"));
       return;
     }
 

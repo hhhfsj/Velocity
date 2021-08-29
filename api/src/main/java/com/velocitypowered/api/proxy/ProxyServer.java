@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * The Velocity API is licensed under the terms of the MIT License. For more details,
+ * reference the LICENSE file in the api top-level directory.
+ */
+
 package com.velocitypowered.api.proxy;
 
 import com.velocitypowered.api.command.CommandManager;
@@ -6,13 +13,11 @@ import com.velocitypowered.api.event.EventManager;
 import com.velocitypowered.api.plugin.PluginManager;
 import com.velocitypowered.api.proxy.config.ProxyConfig;
 import com.velocitypowered.api.proxy.messages.ChannelRegistrar;
+import com.velocitypowered.api.proxy.player.ResourcePackInfo;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.proxy.server.ServerInfo;
 import com.velocitypowered.api.scheduler.Scheduler;
 import com.velocitypowered.api.util.ProxyVersion;
-import com.velocitypowered.api.util.bossbar.BossBar;
-import com.velocitypowered.api.util.bossbar.BossBarColor;
-import com.velocitypowered.api.util.bossbar.BossBarOverlay;
 import java.net.InetSocketAddress;
 import java.util.Collection;
 import java.util.Optional;
@@ -26,7 +31,7 @@ import org.checkerframework.checker.nullness.qual.NonNull;
 public interface ProxyServer extends Audience {
 
   /**
-   * Shuts down the proxy, kicking players with the specified {@param reason}.
+   * Shuts down the proxy, kicking players with the specified {@code reason}.
    *
    * @param reason message to kick online players with
    */
@@ -53,15 +58,6 @@ public interface ProxyServer extends Audience {
    * @return an {@link Optional} with the player, which may be empty
    */
   Optional<Player> getPlayer(UUID uuid);
-
-  /**
-   * Broadcasts a message to all players currently online.
-   *
-   * @param component the message to send
-   * @deprecated Use {@link #sendMessage(net.kyori.adventure.text.Component)} instead
-   */
-  @Deprecated
-  void broadcast(net.kyori.text.Component component);
 
   /**
    * Retrieves all players currently connected to this proxy. This call may or may not be a snapshot
@@ -109,6 +105,14 @@ public interface ProxyServer extends Audience {
    * @return a collection of mathed {@link RegisteredServer}s
    */
   Collection<RegisteredServer> matchServer(String partialName);
+
+  /**
+   * Creates a raw {@link RegisteredServer} without tying it into the internal server map.
+   *
+   * @param server the server to register
+   * @return the {@link RegisteredServer} implementation created by the provided {@link ServerInfo}.
+   */
+  RegisteredServer createRawRegisteredServer(ServerInfo server);
 
   /**
    * Registers a server with this proxy. A server with this name should not already exist.
@@ -193,17 +197,24 @@ public interface ProxyServer extends Audience {
   ProxyVersion getVersion();
 
   /**
-   * Creates a new {@link BossBar}.
+   * Creates a builder to build a {@link ResourcePackInfo} instance for use with
+   * {@link com.velocitypowered.api.proxy.Player#sendResourcePackOffer(ResourcePackInfo)}.
    *
-   * @param title boss bar title
-   * @param color boss bar color
-   * @param overlay boss bar overlay
-   * @param progress boss bar progress
-   * @return a completely new and fresh boss bar
-   * @deprecated Use {@link net.kyori.adventure.bossbar.BossBar} instead
+   * <p>Note: The resource-pack location should always:
+   * - Use HTTPS with a valid certificate.
+   * - Be in a crawler-accessible location. Having it behind Cloudflare or other DoS/Bot/crawler
+   *   protection may cause issues in downloading.
+   * - Be on a web-server with enough bandwidth and reliable connection
+   *   so the download does not time out or fail.</p>
+   *
+   * <p>Do also make sure that the resource pack is in the correct format for the version
+   * of the client. It is also highly recommended to always provide the resource-pack SHA-1 hash
+   * of the resource pack with {@link ResourcePackInfo.Builder#setHash(byte[])}
+   * whenever possible to save bandwidth. If a hash is present the client will first check
+   * if it already has a resource pack by that hash cached.</p>
+   *
+   * @param url The url where the resource pack can be found
+   * @return a ResourcePackInfo builder
    */
-  @Deprecated
-  @NonNull
-  BossBar createBossBar(net.kyori.text.Component title, @NonNull BossBarColor color,
-      @NonNull BossBarOverlay overlay, float progress);
+  ResourcePackInfo.Builder createResourcePackBuilder(String url);
 }

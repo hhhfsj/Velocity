@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.connection.registry;
 
 import com.google.common.base.Preconditions;
@@ -26,6 +43,8 @@ public final class DimensionData {
   private final @Nullable Boolean createDragonFight;
   private final @Nullable Double coordinateScale;
   private final @Nullable String effects;
+  private final @Nullable Integer minY; // Required and added by 1.17
+  private final @Nullable Integer height; // Required and added by 1.17
 
   /**
    * Initializes a new {@link DimensionData} instance.
@@ -47,6 +66,8 @@ public final class DimensionData {
    * @param createDragonFight optional. Internal flag used in the end dimension
    * @param coordinateScale optional, unknown purpose
    * @param effects optional, unknown purpose
+   * @param minY the world effective lowest build-level
+   * @param height the world height above zero
    */
   public DimensionData(String registryIdentifier,
       @Nullable Integer dimensionId,
@@ -58,7 +79,8 @@ public final class DimensionData {
       int logicalHeight, String burningBehaviourIdentifier,
       @Nullable Long fixedTime, @Nullable Boolean createDragonFight,
       @Nullable Double coordinateScale,
-      @Nullable String effects) {
+      @Nullable String effects,
+      @Nullable Integer minY, @Nullable Integer height) {
     Preconditions.checkNotNull(
         registryIdentifier, "registryIdentifier cannot be null");
     Preconditions.checkArgument(registryIdentifier.length() > 0,
@@ -86,6 +108,8 @@ public final class DimensionData {
     this.createDragonFight = createDragonFight;
     this.coordinateScale = coordinateScale;
     this.effects = effects;
+    this.minY = minY;
+    this.height = height;
   }
 
   public String getRegistryIdentifier() {
@@ -156,6 +180,14 @@ public final class DimensionData {
     return coordinateScale;
   }
 
+  public @Nullable Integer getMinY() {
+    return minY;
+  }
+
+  public @Nullable Integer getHeight() {
+    return height;
+  }
+
   /**
    * Returns a fresh {@link DimensionData} with the specified {@code registryIdentifier}
    * and {@code dimensionId}.
@@ -169,7 +201,7 @@ public final class DimensionData {
     return new DimensionData(registryIdentifier, dimensionId, isNatural, ambientLight, isShrunk,
         isUltrawarm, hasCeiling, hasSkylight, isPiglinSafe, doBedsWork, doRespawnAnchorsWork,
         hasRaids, logicalHeight, burningBehaviourIdentifier, fixedTime, createDragonFight,
-        coordinateScale, effects);
+        coordinateScale, effects, minY, height);
   }
 
   public boolean isUnannotated() {
@@ -206,11 +238,19 @@ public final class DimensionData {
         ? details.getDouble("coordinate_scale") : null;
     String effects = details.keySet().contains("effects") ? details.getString("effects")
         : null;
+    Integer minY = details.keySet().contains("min_y") ? details.getInt("min_y") : null;
+    Integer height = details.keySet().contains("height") ? details.getInt("height") : null;
+    if (version.compareTo(ProtocolVersion.MINECRAFT_1_17) >= 0) {
+      Preconditions.checkNotNull(height,
+              "DimensionData requires 'height' to be present for this version");
+      Preconditions.checkNotNull(minY,
+              "DimensionData requires 'minY' to be present for this version");
+    }
     return new DimensionData(
         UNKNOWN_DIMENSION_ID, null, isNatural, ambientLight, isShrunk,
         isUltrawarm, hasCeiling, hasSkylight, isPiglinSafe, doBedsWork, doRespawnAnchorsWork,
         hasRaids, logicalHeight, burningBehaviourIdentifier, fixedTime, hasEnderdragonFight,
-        coordinateScale, effects);
+        coordinateScale, effects, minY, height);
   }
 
   /**
@@ -288,6 +328,12 @@ public final class DimensionData {
     }
     if (effects != null) {
       ret.putString("effects", effects);
+    }
+    if (minY != null) {
+      ret.putInt("min_y", minY);
+    }
+    if (height != null) {
+      ret.putInt("height", height);
     }
     return ret.build();
   }

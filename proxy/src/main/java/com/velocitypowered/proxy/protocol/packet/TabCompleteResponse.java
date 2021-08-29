@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.protocol.packet;
 
 import static com.velocitypowered.api.network.ProtocolVersion.MINECRAFT_1_13;
@@ -10,8 +27,7 @@ import com.velocitypowered.proxy.protocol.ProtocolUtils;
 import io.netty.buffer.ByteBuf;
 import java.util.ArrayList;
 import java.util.List;
-import net.kyori.text.Component;
-import net.kyori.text.serializer.gson.GsonComponentSerializer;
+import net.kyori.adventure.text.Component;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class TabCompleteResponse implements MinecraftPacket {
@@ -68,8 +84,8 @@ public class TabCompleteResponse implements MinecraftPacket {
       int offersAvailable = ProtocolUtils.readVarInt(buf);
       for (int i = 0; i < offersAvailable; i++) {
         String offer = ProtocolUtils.readString(buf);
-        Component tooltip = buf.readBoolean() ? GsonComponentSerializer.INSTANCE.deserialize(
-            ProtocolUtils.readString(buf)) : null;
+        Component tooltip = buf.readBoolean() ? ProtocolUtils.getJsonChatSerializer(version)
+            .deserialize(ProtocolUtils.readString(buf)) : null;
         offers.add(new Offer(offer, tooltip));
       }
     } else {
@@ -91,7 +107,8 @@ public class TabCompleteResponse implements MinecraftPacket {
         ProtocolUtils.writeString(buf, offer.text);
         buf.writeBoolean(offer.tooltip != null);
         if (offer.tooltip != null) {
-          ProtocolUtils.writeString(buf, GsonComponentSerializer.INSTANCE.serialize(offer.tooltip));
+          ProtocolUtils.writeString(buf, ProtocolUtils.getJsonChatSerializer(version)
+              .serialize(offer.tooltip));
         }
       }
     } else {

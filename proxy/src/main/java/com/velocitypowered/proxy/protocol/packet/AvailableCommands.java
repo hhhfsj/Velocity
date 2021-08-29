@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2018 Velocity Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.velocitypowered.proxy.protocol.packet;
 
 import com.google.common.base.MoreObjects;
@@ -23,8 +40,9 @@ import com.velocitypowered.proxy.protocol.MinecraftPacket;
 import com.velocitypowered.proxy.protocol.ProtocolUtils;
 import com.velocitypowered.proxy.protocol.ProtocolUtils.Direction;
 import com.velocitypowered.proxy.protocol.packet.brigadier.ArgumentPropertyRegistry;
+import com.velocitypowered.proxy.util.collect.IdentityHashStrategy;
 import io.netty.buffer.ByteBuf;
-import it.unimi.dsi.fastutil.objects.Object2IntLinkedOpenHashMap;
+import it.unimi.dsi.fastutil.objects.Object2IntLinkedOpenCustomHashMap;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import java.util.ArrayDeque;
 import java.util.Arrays;
@@ -96,12 +114,16 @@ public class AvailableCommands implements MinecraftPacket {
   public void encode(ByteBuf buf, Direction direction, ProtocolVersion protocolVersion) {
     // Assign all the children an index.
     Deque<CommandNode<CommandSource>> childrenQueue = new ArrayDeque<>(ImmutableList.of(rootNode));
-    Object2IntMap<CommandNode<CommandSource>> idMappings = new Object2IntLinkedOpenHashMap<>();
+    Object2IntMap<CommandNode<CommandSource>> idMappings = new Object2IntLinkedOpenCustomHashMap<>(
+        IdentityHashStrategy.instance());
     while (!childrenQueue.isEmpty()) {
       CommandNode<CommandSource> child = childrenQueue.poll();
       if (!idMappings.containsKey(child)) {
         idMappings.put(child, idMappings.size());
         childrenQueue.addAll(child.getChildren());
+        if (child.getRedirect() != null) {
+          childrenQueue.add(child.getRedirect());
+        }
       }
     }
 
@@ -204,6 +226,7 @@ public class AvailableCommands implements MinecraftPacket {
     private final int redirectTo;
     private final @Nullable ArgumentBuilder<CommandSource, ?> args;
     private @MonotonicNonNull CommandNode<CommandSource> built;
+    private boolean validated;
 
     private WireNode(int idx, byte flags, int[] children, int redirectTo,
         @Nullable ArgumentBuilder<CommandSource, ?> args) {
@@ -212,18 +235,34 @@ public class AvailableCommands implements MinecraftPacket {
       this.children = children;
       this.redirectTo = redirectTo;
       this.args = args;
+      this.validated = false;
+    }
+
+    void validate(WireNode[] wireNodes) {
+      // Ensure all children exist. Note that we delay checking if the node has been built yet;
+      // that needs to come after this node is built.
+      for (int child : children) {
+        if (child < 0 || child >= wireNodes.length) {
+          throw new IllegalStateException("Node points to non-existent index " + child);
+        }
+      }
+
+      if (redirectTo != -1) {
+        if (redirectTo < 0 || redirectTo >= wireNodes.length) {
+          throw new IllegalStateException("Redirect node points to non-existent index "
+              + redirectTo);
+        }
+      }
+
+      this.validated = true;
     }
 
     boolean toNode(WireNode[] wireNodes) {
-      if (this.built == null) {
-        // Ensure all children exist. Note that we delay checking if the node has been built yet;
-        // that needs to come after this node is built.
-        for (int child : children) {
-          if (child >= wireNodes.length) {
-            throw new IllegalStateException("Node points to non-existent index " + redirectTo);
-          }
-        }
+      if (!this.validated) {
+        this.validate(wireNodes);
+      }
 
+      if (this.built == null) {
         int type = flags & FLAG_NODE_TYPE;
         if (type == NODE_TYPE_ROOT) {
           this.built = new RootCommandNode<>();
@@ -234,10 +273,6 @@ public class AvailableCommands implements MinecraftPacket {
 
           // Add any redirects
           if (redirectTo != -1) {
-            if (redirectTo >= wireNodes.length) {
-              throw new IllegalStateException("Node points to non-existent index " + redirectTo);
-            }
-
             WireNode redirect = wireNodes[redirectTo];
             if (redirect.built != null) {
               args.redirect(redirect.built);
