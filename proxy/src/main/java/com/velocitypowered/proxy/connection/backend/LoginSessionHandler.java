@@ -107,10 +107,10 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
 
     MinecraftConnection mc = serverConn.ensureConnected();
     VelocityConfiguration configuration = server.getConfiguration();
-    if (configuration.getPlayerInfoForwardingMode() == PlayerInfoForwarding.MODERN && packet
-        .getChannel().equals(VelocityConstants.VELOCITY_IP_FORWARDING_CHANNEL)) {
+    if (configuration.getPlayerInfoForwardingMode() == PlayerInfoForwarding.MODERN
+        && packet.getChannel().equals(VelocityConstants.VELOCITY_IP_FORWARDING_CHANNEL)) {
       ByteBuf forwardingData = createForwardingData(configuration.getForwardingSecret(),
-          cleanRemoteAddress(serverConn.getPlayer().getRemoteAddress()),
+          serverConn.getPlayerRemoteAddressAsString(),
           serverConn.getPlayer().getGameProfile());
       LoginPluginResponse response = new LoginPluginResponse(packet.getId(), true, forwardingData);
       mc.write(response);
@@ -220,16 +220,6 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
     LoginPluginMessage pm;
     while ((pm = loginPluginMessages.poll()) != null) {
       connection.write(pm);
-    }
-  }
-
-  private static String cleanRemoteAddress(InetSocketAddress address) {
-    String addressString = address.getAddress().getHostAddress();
-    int ipv6ScopeIdx = addressString.indexOf('%');
-    if (ipv6ScopeIdx == -1) {
-      return addressString;
-    } else {
-      return addressString.substring(0, ipv6ScopeIdx);
     }
   }
 
