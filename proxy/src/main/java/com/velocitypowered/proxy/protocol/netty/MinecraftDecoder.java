@@ -27,7 +27,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.codec.CorruptedFrameException;
-import org.slf4j.LoggerFactory;
 
 public class MinecraftDecoder extends ChannelInboundHandlerAdapter {
 
@@ -75,10 +74,6 @@ public class MinecraftDecoder extends ChannelInboundHandlerAdapter {
       buf.readerIndex(originalReaderIndex);
       ctx.fireChannelRead(buf);
     } else {
-      // TODO Debugging Purposes, This needs to be removed!
-      LoggerFactory.getLogger("LX").info("[DECODE] [{}] [{}] {} ({})",
-              this.state, this.direction, packet.getClass().getName(), packetId);
-
       try {
         doLengthSanityChecks(buf, packet);
 
