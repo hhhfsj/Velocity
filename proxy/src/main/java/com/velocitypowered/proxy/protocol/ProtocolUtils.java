@@ -253,6 +253,18 @@ public enum ProtocolUtils {
   }
 
   /**
+   * Writes a VarInt-prefixed array of VarInt integers to the {@code buf}.
+   * @param buf the buffer to write to
+   * @param array an array of integers
+   */
+  public static void writeIntegerArray(ByteBuf buf, int[] array) {
+    writeVarInt(buf, array.length);
+    for (int integer : array) {
+      writeVarInt(buf, integer);
+    }
+  }
+
+  /**
    * Reads an UUID from the {@code buf}.
    * @param buf the buffer to read from
    * @return the UUID from the buffer
