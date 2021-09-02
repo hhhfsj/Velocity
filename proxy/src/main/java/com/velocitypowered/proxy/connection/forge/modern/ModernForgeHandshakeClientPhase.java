@@ -18,16 +18,12 @@
 package com.velocitypowered.proxy.connection.forge.modern;
 
 import com.velocitypowered.proxy.connection.MinecraftConnection;
+import com.velocitypowered.proxy.connection.MinecraftSessionHandler;
+import com.velocitypowered.proxy.connection.backend.LoginSessionHandler;
 import com.velocitypowered.proxy.connection.backend.VelocityServerConnection;
 import com.velocitypowered.proxy.connection.client.ClientConnectionPhase;
 import com.velocitypowered.proxy.connection.client.ConnectedPlayer;
-import com.velocitypowered.proxy.protocol.ProtocolUtils;
-import com.velocitypowered.proxy.protocol.StateRegistry;
-import com.velocitypowered.proxy.protocol.packet.LoginPluginMessage;
 import com.velocitypowered.proxy.protocol.packet.LoginPluginResponse;
-import com.velocitypowered.proxy.protocol.packet.PluginMessage;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 
 /**
  * Allows for simple tracking of the phase that the Legacy Forge handshake is in.
@@ -39,21 +35,10 @@ public enum ModernForgeHandshakeClientPhase implements ClientConnectionPhase {
    */
   NOT_STARTED {
     @Override
-    ModernForgeHandshakeClientPhase nextPhase() {
-      return IN_PROGRESS;
+    public void resetConnectionPhase(ConnectedPlayer player) {
+      ModernForgeUtil.resetConnectionPhase(player);
     }
-
-    @Override
-    public void onFirstJoin(ConnectedPlayer player) {
-      // We have something special to do for legacy Forge servers - during first connection the FML
-      // handshake will getNewPhase to complete regardless. Thus, we need to ensure that a reset
-      // packet is ALWAYS sent on first switch.
-      //
-      // As we know that calling this branch only happens on first join, we set that if we are a
-      // Forge client that we must reset on the next switch.
-      player.setPhase(ModernForgeHandshakeClientPhase.COMPLETE);
-    }
-
+    
     @Override
     boolean onHandle(ConnectedPlayer player,
                      LoginPluginResponse message,
@@ -73,11 +58,20 @@ public enum ModernForgeHandshakeClientPhase implements ClientConnectionPhase {
       // Donut forward!
       if (message.getId() == ModernForgeConstants.RESET_DISCRIMINATOR) {
         player.setPhase(ModernForgeHandshakeClientPhase.IN_PROGRESS);
-        return true;
+        VelocityServerConnection serverConnection = player.getConnectionInFlight();
+        if (serverConnection != null) {
+          MinecraftSessionHandler handler = serverConnection.ensureConnected().getSessionHandler();
+          if (handler instanceof LoginSessionHandler) {
+            ((LoginSessionHandler) handler).flushQueuedMessages();
+            return true;
+          }
+        }
+
+        // TODO Disconnect?
       }
 
       // Disconnect?
-      // We didn't recieve the reset?
+      // We didn't receive the reset?
       return false;
     }
   },
@@ -101,27 +95,7 @@ public enum ModernForgeHandshakeClientPhase implements ClientConnectionPhase {
   COMPLETE {
     @Override
     public void resetConnectionPhase(ConnectedPlayer player) {
-      ByteBuf byteBuf = Unpooled.buffer();
-      // Target Network Receiver
-      ProtocolUtils.writeString(byteBuf, ModernForgeConstants.HANDSHAKE_CHANNEL);
-      // Payload Length
-      ProtocolUtils.writeVarInt(byteBuf, 1);
-      // Discriminator
-      byteBuf.writeByte(ModernForgeConstants.RESET_DISCRIMINATOR);
-
-      if (player.getConnection().getState() == StateRegistry.LOGIN) {
-        player.getConnection().write(new LoginPluginMessage(
-                ModernForgeConstants.RESET_DISCRIMINATOR,
-                ModernForgeConstants.LOGIN_WRAPPER_CHANNEL,
-                byteBuf));
-      } else {
-        player.getConnection().write(new PluginMessage(
-                ModernForgeConstants.LOGIN_WRAPPER_CHANNEL,
-                byteBuf));
-        player.getConnection().setState(StateRegistry.LOGIN);
-      }
-
-      player.setPhase(ModernForgeHandshakeClientPhase.WAITING_RESET);
+      ModernForgeUtil.resetConnectionPhase(player);
     }
 
     @Override
