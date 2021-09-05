@@ -62,6 +62,7 @@ import com.velocitypowered.proxy.protocol.packet.StatusRequest;
 import com.velocitypowered.proxy.protocol.packet.StatusResponse;
 import com.velocitypowered.proxy.protocol.packet.TabCompleteRequest;
 import com.velocitypowered.proxy.protocol.packet.TabCompleteResponse;
+import com.velocitypowered.proxy.protocol.packet.UpdateTags;
 import com.velocitypowered.proxy.protocol.packet.title.LegacyTitlePacket;
 import com.velocitypowered.proxy.protocol.packet.title.TitleActionbarPacket;
 import com.velocitypowered.proxy.protocol.packet.title.TitleClearPacket;
@@ -276,6 +277,12 @@ public enum StateRegistry {
           map(0x33, MINECRAFT_1_16, false),
           map(0x32, MINECRAFT_1_16_2, false),
           map(0x36, MINECRAFT_1_17, false));
+      clientbound.register(UpdateTags.class, UpdateTags::new,
+          map(0x55, MINECRAFT_1_13, false),
+          map(0x5B, MINECRAFT_1_14, false),
+          map(0x5C, MINECRAFT_1_15, false),
+          map(0x5B, MINECRAFT_1_16, false),
+          map(0x66, MINECRAFT_1_17, false));
     }
   },
   LOGIN {
